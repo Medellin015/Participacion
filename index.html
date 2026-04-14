@@ -452,18 +452,31 @@
                 planDeltas = { adds: [], updates: [], deletes: [] }; 
                 anexoDeltas = { adds: [], updates: [], deletes: [] };
 
-                const payload = { action: 'validarYGuardarDeltas', planDeltas: snapshot.plan, anexoDeltas: snapshot.anexo };
+                const payload = { action: 'validarYGuardarDeltas', requestId: generateUUID(), planDeltas: snapshot.plan, anexoDeltas: snapshot.anexo };
 
                 for (let i = 0; i < intentos; i++) {
                     try {
                         const response = await fetch(WEB_APP_URL, { method: 'POST', body: JSON.stringify(payload) });
                         const result = await response.json();
                         
-                        if (result.status === 'success' || result.status === 'warning') { 
-                            updateSaveStatus('saved'); 
-                            hasUnsavedChanges = false; 
-                            saveTimeoutId = null; 
-                            return; 
+                        if (result.status === 'success' || result.status === 'warning' || result.status === 'duplicate') {
+                            updateSaveStatus('saved');
+                            hasUnsavedChanges = false;
+                            saveTimeoutId = null;
+                            if (result.report) {
+                                let ignorados = [
+                                    ...(result.report.plan?.updatesIgnorados || []),
+                                    ...(result.report.anexo?.updatesIgnorados || [])
+                                ];
+                                if (ignorados.length > 0) {
+                                    mostrarNotificacion("⚠️ " + ignorados.length + " cambio(s) no se aplicaron porque las filas ya no existen.");
+                                }
+                                let dups = (result.report.plan?.addsDuplicados || 0) + (result.report.anexo?.addsDuplicados || 0);
+                                if (dups > 0) {
+                                    mostrarNotificacion("ℹ️ " + dups + " fila(s) ya existían y no se duplicaron.");
+                                }
+                            }
+                            return;
                         }
                     } catch (error) { 
                         if (i < intentos - 1) { await new Promise(r => setTimeout(r, 2000 * (i + 1))); }
