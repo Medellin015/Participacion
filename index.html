@@ -93,6 +93,13 @@
         .btn-delete:hover { background-color: #ef4444; color: white; }
         
         #toast { display: none; position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 1000; font-size: 14px; font-weight: 500; }
+
+        /* Clases CSS para el Drag & Drop de columnas */
+        th.draggable { cursor: grab; }
+        th.draggable:active { cursor: grabbing; }
+        th.dragging { opacity: 0.6; background-color: #e2e8f0; border: 2px dashed var(--primary); }
+        th.drag-over { border-left: 4px solid var(--primary) !important; background-color: #e0f2fe; }
+        body.is-dragging th * { pointer-events: none; }
     </style>
 </head>
 <body>
@@ -327,8 +334,12 @@
             "VALIDADOR ¿REQUIERE CPC?", "Clasificador CPC", "Validador sección CPC", "Reserva"
         ];
         
+        // Arreglos dinámicos para visualización (Drag & Drop)
+        let dynamicPlanHeaders = [...predefinedHeaders];
+        let dynamicAnexoHeaders = [...anexoHeaders];
+
         const columnasMoneda = ["Valor Unitario", "COSTO UNITARIO", "COSTO TOTAL"];
-        const columnasNumericas = ["Duración del Proyecto", "CDP", "RP", "CANTIDAD"];
+        const columnasNumericas = ["Duración del Proyecto", "CANTIDAD"]; // Removidos CDP y RP para permitir texto
         const columnasFecha = ["Fecha Inicio Ejecución"];
         const columnasMixtas = ["CDP", "RP", "Contrato Marco", "Contratista"]; 
         
@@ -369,6 +380,72 @@
         };
 
         const formatMoneda = (val) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
+
+        // ================= LÓGICA DE DRAG & DROP =================
+        let draggedCol = null;
+        let dragView = null;
+
+        function handleDragStart(e, col, view) {
+            if (currentRole !== 'Equipo de Contratación') return;
+            draggedCol = col;
+            dragView = view;
+            e.dataTransfer.effectAllowed = 'move';
+            e.target.classList.add('dragging');
+            document.body.classList.add('is-dragging'); // Evita flickering al arrastrar sobre los hijos del th
+        }
+
+        function handleDragOver(e) {
+            if (currentRole !== 'Equipo de Contratación') return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            let targetTh = e.target.closest('th');
+            if (targetTh && !targetTh.classList.contains('dragging')) {
+                targetTh.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave(e) {
+            if (currentRole !== 'Equipo de Contratación') return;
+            let targetTh = e.target.closest('th');
+            if (targetTh) {
+                targetTh.classList.remove('drag-over');
+            }
+        }
+
+        function handleDrop(e, targetCol, view) {
+            if (currentRole !== 'Equipo de Contratación') return;
+            e.preventDefault();
+            document.body.classList.remove('is-dragging');
+            document.querySelectorAll('.dragging, .drag-over').forEach(el => {
+                el.classList.remove('dragging');
+                el.classList.remove('drag-over');
+            });
+            
+            if (dragView !== view || draggedCol === targetCol || !draggedCol) return;
+            
+            let headersArray = view === 'Plan' ? dynamicPlanHeaders : dynamicAnexoHeaders;
+            let fromIndex = headersArray.indexOf(draggedCol);
+            let toIndex = headersArray.indexOf(targetCol);
+            
+            if (fromIndex > -1 && toIndex > -1) {
+                headersArray.splice(fromIndex, 1);
+                headersArray.splice(toIndex, 0, draggedCol);
+                view === 'Plan' ? renderTable() : renderAnexoTable();
+            }
+            draggedCol = null;
+            dragView = null;
+        }
+
+        function handleDragEnd(e) {
+            document.body.classList.remove('is-dragging');
+            document.querySelectorAll('.dragging, .drag-over').forEach(el => {
+                el.classList.remove('dragging');
+                el.classList.remove('drag-over');
+            });
+            draggedCol = null;
+            dragView = null;
+        }
+        // =========================================================
 
         function updateSaveStatus(status) {
             const s1 = document.getElementById('saveStatus1'); const s2 = document.getElementById('saveStatus2');
@@ -851,7 +928,7 @@
             const tbody = document.getElementById('tableBody');
             
             let h = '<tr>'; 
-            predefinedHeaders.forEach(c => {
+            dynamicPlanHeaders.forEach(c => {
                 let css = getColCss(c);
                 let sAttr = css ? `style="${css}"` : '';
                 
@@ -861,7 +938,10 @@
                     filterBtn = `<button class="filter-icon-btn ${isFiltered}" onclick="openColumnFilter(event, '${c}', 'Plan')">🔽</button>`;
                 }
                 
-                h += `<th ${sAttr}>
+                let dragAttrs = currentRole === 'Equipo de Contratación' ? 
+                    `draggable="true" class="draggable" ondragstart="handleDragStart(event, '${c}', 'Plan')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, '${c}', 'Plan')" ondragend="handleDragEnd(event)"` : '';
+
+                h += `<th ${sAttr} ${dragAttrs}>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div class="sort-container" onclick="toggleSort('${c}')">${c} <span class="sort-icon ${sortCol === c ? 'active' : ''}">↕</span></div>
                             ${filterBtn}
@@ -904,7 +984,7 @@
                 let tr = document.createElement('tr'); tr.className = canRow ? 'row-editable' : 'row-locked';
                 tr.setAttribute('data-rowid', r.ID);
                 
-                predefinedHeaders.forEach(cn => {
+                dynamicPlanHeaders.forEach(cn => {
                     let v = r[cn]||''; let td = document.createElement('td'); 
                     let css = getColCss(cn);
                     if (css) td.style.cssText = css;
@@ -991,7 +1071,7 @@
             const tbody = document.getElementById('anexoTableBody');
             
             let h = '<tr>'; 
-            anexoHeaders.forEach(c => {
+            dynamicAnexoHeaders.forEach(c => {
                 let css = getColCss(c);
                 let sAttr = css ? `style="${css}"` : '';
                 
@@ -1001,7 +1081,10 @@
                     filterBtn = `<button class="filter-icon-btn ${isFiltered}" onclick="openColumnFilter(event, '${c}', 'Anexo')">🔽</button>`;
                 }
                 
-                h += `<th ${sAttr}>
+                let dragAttrs = currentRole === 'Equipo de Contratación' ? 
+                    `draggable="true" class="draggable" ondragstart="handleDragStart(event, '${c}', 'Anexo')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, '${c}', 'Anexo')" ondragend="handleDragEnd(event)"` : '';
+
+                h += `<th ${sAttr} ${dragAttrs}>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div class="sort-container" onclick="toggleSort('${c}', true)">${c} <span class="sort-icon ${sortCol === c ? 'active' : ''}">↕</span></div>
                             ${filterBtn}
@@ -1037,7 +1120,7 @@
                 let tr = document.createElement('tr'); tr.className = can ? 'row-editable' : 'row-locked';
                 tr.setAttribute('data-rowid', r.ID);
                 
-                anexoHeaders.forEach(cn => {
+                dynamicAnexoHeaders.forEach(cn => {
                     let v = r[cn]||''; let td = document.createElement('td');
                     let css = getColCss(cn);
                     if (css) td.style.cssText = css;
@@ -1381,7 +1464,7 @@
 
         function exportData(t){
             let d = t==='Plan' ? appData : anexoData;
-            let h = t==='Plan' ? predefinedHeaders : anexoHeaders.filter(c => c !== 'Reserva');
+            let h = t==='Plan' ? dynamicPlanHeaders : dynamicAnexoHeaders.filter(c => c !== 'Reserva');
             let fn = t==='Plan' ? "Plan_2026.xlsx" : `Anexo_${document.getElementById('filterProyectoAnexo').value || 'Completo'}.xlsx`;
             
             if(t === 'Plan') {
