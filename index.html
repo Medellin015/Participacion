@@ -325,7 +325,7 @@
             "Proyecto", "Trasladar a Proyecto", "Tipo de Recurso", "Posición Presupuestaría", "Trasladar a Pospre", "Fondo", "Observación", "Indicador Plan de Dllo (Solo producto)", 
             "ACTIVIDAD MGA", "Actividad detallada", "Codigo producto MGA", "Codigo CPC", "ESTADO", "CDP", 
             "Contrato Marco", "RP", "Contratista", "Técnico", "Jurídico", "Logístico", "Supervisor Principal", 
-            "Supervisor Suplente", "Apoyo a la Supervisión Técnico", "Apoyo a la Supervisión Financiero", "Apoyo a la Supervisión Jurídico"
+            "Supervisor Suplente", "Apoyo a la Supervisión Técnico", "Apoyo a la Supervisión Financiero", "Apoyo a la Supervisión Jurico"
         ];
         
         const anexoHeaders = [
@@ -352,7 +352,6 @@
             "PRODUCTO MGA": "ProductoMGA"
         };
 
-        let mapasDependientes = {}; 
         let listasDesplegables = {
             "Subsecretaría": [], 
             "Mes de Compra": ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"],
@@ -379,6 +378,9 @@
             "Reserva": ["SÍ", "NO"] 
         };
 
+        let mapasDependientes = {}; 
+        let mapaProySubse = {}; // NUEVO: Mapa para auto-llenar Subsecretaría
+
         const formatMoneda = (val) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
 
         // ================= LÓGICA DE DRAG & DROP =================
@@ -391,7 +393,7 @@
             dragView = view;
             e.dataTransfer.effectAllowed = 'move';
             e.target.classList.add('dragging');
-            document.body.classList.add('is-dragging'); // Evita flickering al arrastrar sobre los hijos del th
+            document.body.classList.add('is-dragging'); 
         }
 
         function handleDragOver(e) {
@@ -467,6 +469,8 @@
                 if (result.status === 'success') {
                     planDeltas = { adds: [], updates: [], deletes: [] }; anexoDeltas = { adds: [], updates: [], deletes: [] };
                     appData = result.planData || []; anexoData = result.anexoData || []; mapasDependientes = result.mapasDependientes || {};
+                    mapaProySubse = result.mapaProySubse || {}; // NUEVO: Recibimos el diccionario
+                    
                     if (result.listas) {
                         for (let key in result.listas) {
                             let normKey = key.trim().replace(/\s+/g, ' ');
@@ -819,7 +823,6 @@
 
         function closeColumnFilter() { document.getElementById('columnFilterPopup').style.display = 'none'; }
         
-        // REESCRITO: Solo selecciona o deselecciona las opciones visibles si hay una búsqueda activa
         function selectAllFilters(check) { 
             let searchInput = document.getElementById('filterPopupSearch');
             let hasSearch = searchInput && searchInput.value.trim() !== '';
@@ -834,7 +837,6 @@
             }); 
         }
 
-        // REESCRITO: Ignora opciones ocultas si el usuario escribió en la caja de búsqueda
         function applyColumnFilter() {
             let selected = [];
             let searchInput = document.getElementById('filterPopupSearch');
@@ -856,7 +858,7 @@
             if (!hasSearch && (selected.length === allCbs.length || selected.length === 0)) {
                 delete activeFilters[col]; 
             } else if (hasSearch && selected.length === 0) {
-                activeFilters[col] = ["__NO_MATCH__"]; // Filtro vacío forzado si aplicó una búsqueda sin coincidencias
+                activeFilters[col] = ["__NO_MATCH__"]; 
             } else {
                 activeFilters[col] = selected;
             }
@@ -1289,6 +1291,18 @@
                                 data[i]["ACTIVIDAD MGA"] = ""; data[i]["Codigo producto MGA"] = ""; data[i]["Codigo CPC"] = "";
                             }
                         }
+
+                        // NUEVO: Auto-llenar Subsecretaría si se edita el Proyecto manualmente
+                        if (c === "Proyecto" && mapaProySubse[v]) {
+                            let nuevaSub = mapaProySubse[v];
+                            if (data[i]["Subsecretaría"] !== nuevaSub) {
+                                data[i]["Subsecretaría"] = nuevaSub;
+                                if(!del.adds.find(r=>r.ID===id)){
+                                    let uSub = del.updates.find(x=>x.id===id && x.field==="Subsecretaría");
+                                    if(uSub) uSub.value = nuevaSub; else del.updates.push({id, field:"Subsecretaría", value:nuevaSub});
+                                }
+                            }
+                        }
                         
                         if(!del.adds.find(r=>r.ID===id)){
                             let u = del.updates.find(x=>x.id===id && x.field===c);
@@ -1343,10 +1357,6 @@
         function crearNecesidad(){
             let n = { ID: generateUUID() }; predefinedHeaders.forEach(c => n[c] = "");
             
-            let sub = "";
-            if (currentRole !== "Invitado" && currentRole !== "Equipo de Contratación") { sub = currentRole; }
-            n["Subsecretaría"] = sub; 
-            
             let fP = document.getElementById('filterProyecto').value;
             let fPosprePlan = document.getElementById('filterPosprePlan')?.value || "";
             let idNuevo = n.ID;
@@ -1357,9 +1367,18 @@
                 n["Proyecto"] = fP;
                 let lastIndex = -1;
                 for(let i = 0; i < appData.length; i++){ if(String(appData[i].Proyecto) === String(fP)) lastIndex = i; }
-                if(!n["Subsecretaría"] && lastIndex !== -1) { n["Subsecretaría"] = appData[lastIndex]["Subsecretaría"] || ""; }
+                
+                // NUEVO: Priorizar mapa de subsecretarías para llenar fila nueva
+                if (mapaProySubse[fP]) {
+                    n["Subsecretaría"] = mapaProySubse[fP];
+                } else if(!n["Subsecretaría"] && lastIndex !== -1) { 
+                    n["Subsecretaría"] = appData[lastIndex]["Subsecretaría"] || ""; 
+                }
+                
                 if(lastIndex !== -1) appData.splice(lastIndex + 1, 0, n); else appData.push(n);
-            } else { appData.push(n); }
+            } else { 
+                appData.push(n); 
+            }
             
             planDeltas.adds.push(n); renderTable(); triggerAutoSave();
             
@@ -1376,10 +1395,6 @@
         function crearFilaAnexo(){
             let n = { ID: generateUUID() }; anexoHeaders.forEach(c => n[c] = "");
             
-            let sub = "";
-            if (currentRole !== "Invitado" && currentRole !== "Equipo de Contratación") { sub = currentRole; }
-            n["Subsecretaría"] = sub;
-            
             let fP = document.getElementById('filterProyectoAnexo').value;
             let fA = document.getElementById('filterActividadMGA')?.value || "";
             let fPospre = document.getElementById('filterPospreAnexo')?.value || "";
@@ -1387,6 +1402,11 @@
             n["Proyecto"] = fP;
             if(fA) n["ACTIVIDAD MGA"] = fA;
             if(fPospre) n["Clasificador por objeto de gasto (POSPRE)"] = fPospre;
+            
+            // NUEVO: Priorizar mapa de subsecretarías
+            if (mapaProySubse[fP]) {
+                n["Subsecretaría"] = mapaProySubse[fP];
+            }
             
             let idNuevo = n.ID;
             let lastIndex = -1;
