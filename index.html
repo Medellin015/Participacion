@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Bloqueo de caché para que los usuarios siempre vean los cambios recientes -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -265,7 +264,6 @@
             <button onclick="closeColumnFilter()" style="border:none; background:none; cursor:pointer; color: #64748b; font-size: 14px;">✖</button>
         </div>
         
-        <!-- Cajita de búsqueda integrada dentro del embudo -->
         <div style="margin-bottom: 8px;">
             <input type="text" id="filterPopupSearch" placeholder="🔍 Buscar opción..." style="width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box; font-size: 12px; outline: none; background: #f8fafc;" onkeyup="searchFilterPopup()">
         </div>
@@ -325,7 +323,7 @@
             "Proyecto", "Trasladar a Proyecto", "Tipo de Recurso", "Posición Presupuestaría", "Trasladar a Pospre", "Fondo", "Observación", "Indicador Plan de Dllo (Solo producto)", 
             "ACTIVIDAD MGA", "Actividad detallada", "Codigo producto MGA", "Codigo CPC", "ESTADO", "CDP", 
             "Contrato Marco", "RP", "Contratista", "Técnico", "Jurídico", "Logístico", "Supervisor Principal", 
-            "Supervisor Suplente", "Apoyo a la Supervisión Técnico", "Apoyo a la Supervisión Financiero", "Apoyo a la Supervisión Jurico"
+            "Supervisor Suplente", "Apoyo a la Supervisión Técnico", "Apoyo a la Supervisión Financiero", "Apoyo a la Supervisión Jurídico"
         ];
         
         const anexoHeaders = [
@@ -991,7 +989,7 @@
                     let css = getColCss(cn);
                     if (css) td.style.cssText = css;
 
-                    const columnasEstaticas = ["ACTIVIDAD MGA", "Codigo producto MGA", "Codigo CPC"];
+                    const columnasEstaticas = ["ACTIVIDAD MGA", "Codigo producto MGA", "Codigo CPC", "Subsecretaría"];
                     
                     let canEditCell = false;
                     if (canRow && !columnasEstaticas.includes(cn)) {
@@ -1127,7 +1125,7 @@
                     let css = getColCss(cn);
                     if (css) td.style.cssText = css;
 
-                    if(can && cn !== "COSTO UNITARIO"){
+                    if(can && cn !== "COSTO UNITARIO" && cn !== "Subsecretaría"){
                         if(columnasMixtas.includes(cn)){
                             let dlId = 'list-' + cn.replace(/\s+/g, '');
                             td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${v || '&nbsp;'}</div><input type="text" class="cell-input anexo-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" list="${dlId}" value="${v}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
