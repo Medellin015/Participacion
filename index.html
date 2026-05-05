@@ -977,8 +977,7 @@
                 if (!passesColFilters) return;
                 
                 vis++; 
-                let actDetallada = String(r["Actividad detallada"] || "").trim().toLowerCase();
-                if (!actDetallada.startsWith("reserva")) { tot += Number(r["Valor Unitario"]) || 0; }
+                tot += Number(r["Valor Unitario"]) || 0;
                 
                 let canRow = checkPermissions(r["Subsecretaría"], currentRole);
                 let tr = document.createElement('tr'); tr.className = canRow ? 'row-editable' : 'row-locked';
@@ -1113,8 +1112,7 @@
                 }
                 if (!passesColFilters) return;
 
-                let actDetAnexo = String(r["ACTIVIDADES DETALLADAS"] || "").trim().toLowerCase();
-                if (!actDetAnexo.startsWith("reserva")) { totAnex += Number(r["COSTO TOTAL"]) || 0; }
+                totAnex += Number(r["COSTO TOTAL"]) || 0;
                 
                 let can = checkPermissions(r["Subsecretaría"], currentRole);
                 let tr = document.createElement('tr'); tr.className = can ? 'row-editable' : 'row-locked';
@@ -1166,8 +1164,7 @@
             let totPlan = 0;
             appData.forEach(r => { 
                 if(String(r.Proyecto) === String(fP)) {
-                    let actDetPlan = String(r["Actividad detallada"] || "").trim().toLowerCase();
-                    if (!actDetPlan.startsWith("reserva")) { totPlan += Number(r["Valor Unitario"]) || 0; }
+                    totPlan += Number(r["Valor Unitario"]) || 0;
                 }
             });
             let diff = Math.abs(totPlan - totAnex);
