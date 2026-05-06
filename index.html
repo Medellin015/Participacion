@@ -297,14 +297,7 @@
         let activeColFiltersAnexo = {};
         let searchTimeoutId = null;
 
-        const noFilterCols = [
-            "Fecha Inicio Ejecución", "Objeto", "Valor Unitario",
-            "Indicador Plan de Dllo (Solo producto)", "ACTIVIDAD MGA",
-            "Actividad detallada", "ACTIVIDADES DETALLADAS",
-            "Codigo producto MGA", "CÓDIGO PRODUCTO MGA",
-            "Codigo CPC", "Clasificador CPC",
-            "COSTO UNITARIO", "COSTO TOTAL", "CANTIDAD" 
-        ];
+        const noFilterCols = [];
 
         window.addEventListener('beforeunload', function (e) {
             if (hasUnsavedChanges || saveTimeoutId || isSaving) {
