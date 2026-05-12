@@ -296,6 +296,7 @@
         let activeColFiltersPlan = {}; 
         let activeColFiltersAnexo = {};
         let searchTimeoutId = null;
+        let hasShownConnectionError = false;
 
         const noFilterCols = [];
 
@@ -330,7 +331,7 @@
         let dynamicAnexoHeaders = [...anexoHeaders];
 
         const columnasMoneda = ["Valor Unitario", "COSTO UNITARIO", "COSTO TOTAL"];
-        const columnasNumericas = ["Duración del Proyecto", "CANTIDAD"]; // Removidos CDP y RP para permitir texto
+        const columnasNumericas = ["Duración del Proyecto", "CANTIDAD"]; 
         const columnasFecha = ["Fecha Inicio Ejecución"];
         const columnasMixtas = ["CDP", "RP", "Contrato Marco", "Contratista"]; 
         
@@ -370,7 +371,7 @@
         };
 
         let mapasDependientes = {}; 
-        let mapaProySubse = {}; // NUEVO: Mapa para auto-llenar Subsecretaría
+        let mapaProySubse = {}; 
 
         const formatMoneda = (val) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
 
@@ -460,7 +461,7 @@
                 if (result.status === 'success') {
                     planDeltas = { adds: [], updates: [], deletes: [] }; anexoDeltas = { adds: [], updates: [], deletes: [] };
                     appData = result.planData || []; anexoData = result.anexoData || []; mapasDependientes = result.mapasDependientes || {};
-                    mapaProySubse = result.mapaProySubse || {}; // NUEVO: Recibimos el diccionario
+                    mapaProySubse = result.mapaProySubse || {}; 
                     
                     if (result.listas) {
                         for (let key in result.listas) {
@@ -528,10 +529,20 @@
 
                 for (let i = 0; i < intentos; i++) {
                     try {
-                        const response = await fetch(WEB_APP_URL, { method: 'POST', body: JSON.stringify(payload) });
+                        const controller = new AbortController();
+                        const fetchTimeout = setTimeout(() => controller.abort(), 8000); // ⏱️ Forzar fallo si se queda "pending" más de 8 segundos
+
+                        const response = await fetch(WEB_APP_URL, { 
+                            method: 'POST', 
+                            body: JSON.stringify(payload),
+                            signal: controller.signal 
+                        });
+                        
+                        clearTimeout(fetchTimeout);
                         const result = await response.json();
                         
                         if (result.status === 'success' || result.status === 'warning' || result.status === 'duplicate') {
+                            hasShownConnectionError = false;
                             updateSaveStatus('saved');
                             hasUnsavedChanges = false;
                             saveTimeoutId = null;
@@ -570,6 +581,14 @@
                 dedup(anexoDeltas.updates);
                 
                 updateSaveStatus('error'); hasUnsavedChanges = true; saveTimeoutId = null; 
+
+                if (!hasShownConnectionError) {
+                    document.getElementById('msgModalTitle').innerText = '❌ Error de Conexión';
+                    document.getElementById('msgModalTitle').style.color = 'var(--danger)';
+                    document.getElementById('msgModalBody').innerText = 'Tus últimos cambios no pudieron ser enviados a la base de datos.\n\nEsto suele ocurrir por bloqueos en la red institucional (Firewall) o caídas de internet.\n\n⚠️ IMPORTANTE: No cierres ni recargues la página (F5) o perderás lo que acabas de escribir. El sistema seguirá intentando guardarlo automáticamente en el fondo.';
+                    document.getElementById('msgModal').style.display = 'flex';
+                    hasShownConnectionError = true;
+                }
             } finally {
                 isSaving = false; 
                 
@@ -584,6 +603,7 @@
             let curPro = document.getElementById('filterProyectoAnexo').value;
             if(!curPro) {
                 document.getElementById('msgModalTitle').innerText = 'Alerta';
+                document.getElementById('msgModalTitle').style.color = 'var(--text-main)';
                 document.getElementById('msgModalBody').innerText = 'Por favor, selecciona un proyecto de la lista para analizarlo.';
                 document.getElementById('msgModal').style.display = 'flex';
                 return;
@@ -1254,6 +1274,7 @@
                     let hasLetters = /[a-zA-Z]/.test(originalV);
                     if (isNumeric && hasLetters) {
                         document.getElementById('msgModalTitle').innerText = '⚠️ Dato Numérico Requerido';
+                        document.getElementById('msgModalTitle').style.color = 'var(--text-main)';
                         document.getElementById('msgModalBody').innerText = `La columna "${c}" solo acepta números.\n\nLas letras que escribiste ("${originalV}") han sido eliminadas automáticamente.`;
                         document.getElementById('msgModal').style.display = 'flex';
                     }
@@ -1280,7 +1301,6 @@
                             }
                         }
 
-                        // NUEVO: Auto-llenar Subsecretaría si se edita el Proyecto manualmente
                         if (c === "Proyecto" && mapaProySubse[v]) {
                             let nuevaSub = mapaProySubse[v];
                             if (data[i]["Subsecretaría"] !== nuevaSub) {
@@ -1356,7 +1376,6 @@
                 let lastIndex = -1;
                 for(let i = 0; i < appData.length; i++){ if(String(appData[i].Proyecto) === String(fP)) lastIndex = i; }
                 
-                // NUEVO: Priorizar mapa de subsecretarías para llenar fila nueva
                 if (mapaProySubse[fP]) {
                     n["Subsecretaría"] = mapaProySubse[fP];
                 } else if(!n["Subsecretaría"] && lastIndex !== -1) { 
@@ -1391,7 +1410,6 @@
             if(fA) n["ACTIVIDAD MGA"] = fA;
             if(fPospre) n["Clasificador por objeto de gasto (POSPRE)"] = fPospre;
             
-            // NUEVO: Priorizar mapa de subsecretarías
             if (mapaProySubse[fP]) {
                 n["Subsecretaría"] = mapaProySubse[fP];
             }
