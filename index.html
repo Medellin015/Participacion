@@ -1292,6 +1292,14 @@
                         if (historyStack.length > 30) historyStack.shift(); 
                         
                         data[i][c] = v; let id = data[i].ID; let del = data === appData ? planDeltas : anexoDeltas;
+
+                        let activeFilters = data === appData ? activeColFiltersPlan : activeColFiltersAnexo;
+                        if (activeFilters[c] && activeFilters[c].length > 0) {
+                            let filterVal = String(v ?? "").trim();
+                            if (!activeFilters[c].includes(filterVal)) {
+                                activeFilters[c].push(filterVal);
+                            }
+                        }
                         
                         if (data === appData && c === "Actividad detallada") {
                             let currentProject = data[i].Proyecto;
