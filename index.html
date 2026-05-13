@@ -997,7 +997,7 @@
                 tr.setAttribute('data-rowid', r.ID);
                 
                 dynamicPlanHeaders.forEach(cn => {
-                    let v = r[cn]||''; let td = document.createElement('td'); 
+                    let v = r[cn] ?? ''; let td = document.createElement('td');
                     let css = getColCss(cn);
                     if (css) td.style.cssText = css;
 
@@ -1050,11 +1050,13 @@
                             td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${v ? formatMoneda(v) : '&nbsp;'}</div><input type="text" class="cell-input curr plan-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" value="${v?formatMoneda(v):''}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
                         } else if(columnasFecha.includes(cn)) {
                             let dateVal = v ? toYYYYMMDD(v) : '';
-                            td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${dateVal ? toDDMMAAAA(v) : '&nbsp;'}</div><input type="date" class="cell-input plan-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" value="${dateVal}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
+                            let validDate = /^\d{4}-\d{2}-\d{2}$/.test(dateVal);
+                            let displayVal = validDate ? toDDMMAAAA(v) : (v || '&nbsp;');
+                            td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${displayVal}</div><input type="date" class="cell-input plan-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" value="${validDate ? dateVal : ''}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
                         } else {
                             td.innerText = v;
-                            td.contentEditable = true; 
-                            td.className = "plan-input"; 
+                            td.contentEditable = true;
+                            td.className = "plan-input";
                             td.dataset.id = r.ID; 
                             td.dataset.col = cn;
                         }
@@ -1132,7 +1134,7 @@
                 tr.setAttribute('data-rowid', r.ID);
                 
                 dynamicAnexoHeaders.forEach(cn => {
-                    let v = r[cn]||''; let td = document.createElement('td');
+                    let v = r[cn] ?? ''; let td = document.createElement('td');
                     let css = getColCss(cn);
                     if (css) td.style.cssText = css;
 
@@ -1156,7 +1158,9 @@
                             td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${v ? formatMoneda(v) : '&nbsp;'}</div><input type="text" class="cell-input curr anexo-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" value="${v?formatMoneda(v):''}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
                         } else if(columnasFecha.includes(cn)) {
                             let dateVal = v ? toYYYYMMDD(v) : '';
-                            td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${dateVal ? toDDMMAAAA(v) : '&nbsp;'}</div><input type="date" class="cell-input anexo-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" value="${dateVal}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
+                            let validDate = /^\d{4}-\d{2}-\d{2}$/.test(dateVal);
+                            let displayVal = validDate ? toDDMMAAAA(v) : (v || '&nbsp;');
+                            td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${displayVal}</div><input type="date" class="cell-input anexo-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" value="${validDate ? dateVal : ''}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
                         } else {
                             td.innerText = v;
                             td.contentEditable = true; 
@@ -1279,8 +1283,8 @@
                         document.getElementById('msgModal').style.display = 'flex';
                     }
                     
-                    if(!isNaN(v) && v !== "") v = Number(v);
-                    
+                    if(isNumeric && !isNaN(v) && v !== "") v = Number(v);
+
                     let oldVal = data[i][c]; if (oldVal === undefined) oldVal = "";
                     
                     if(oldVal !== v){
