@@ -1035,8 +1035,8 @@
                         } else if (columnasMixtas.includes(cn)) {
                             let dlId = 'list-' + cn.replace(/\s+/g, '');
                             td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${v || '&nbsp;'}</div><input type="text" class="cell-input plan-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" list="${dlId}" value="${v}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
-                        } else if(listasDesplegables[cn] || dependenciasColumna[cn]){
-                            let opts = listasDesplegables[cn] || (mapasDependientes[dependenciasColumna[cn]]?.[r.Proyecto] || []);
+                        } else if((listasDesplegables[cn] && listasDesplegables[cn].length > 0) || dependenciasColumna[cn]){
+                            let opts = (listasDesplegables[cn] && listasDesplegables[cn].length > 0) ? listasDesplegables[cn] : (mapasDependientes[dependenciasColumna[cn]]?.[r.Proyecto] || []);
                             let found = false;
                             let optionsHTML = `<option value=""></option>`;
                             opts.forEach(o => {
@@ -1142,7 +1142,7 @@
                         if(columnasMixtas.includes(cn)){
                             let dlId = 'list-' + cn.replace(/\s+/g, '');
                             td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${v || '&nbsp;'}</div><input type="text" class="cell-input anexo-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" list="${dlId}" value="${v}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
-                        } else if(listasDesplegables[cn] || cn === "Clasificador por objeto de gasto (POSPRE)"){
+                        } else if((listasDesplegables[cn] && listasDesplegables[cn].length > 0) || cn === "Clasificador por objeto de gasto (POSPRE)"){
                             let ln = cn === "Clasificador por objeto de gasto (POSPRE)" ? "Posición Presupuestaría" : cn;
                             let opts = listasDesplegables[ln] || [];
                             let found = false;
