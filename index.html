@@ -1001,6 +1001,10 @@
                     let css = getColCss(cn);
                     if (css) td.style.cssText = css;
 
+                    if (cn === "Trasladar a Proyecto") {
+                        console.log("[DIAG-cell]", { cn, rowId: r.ID, allKeys: Object.keys(r).filter(k => k.toLowerCase().includes("trasladar")), allRowData_TaP: r[cn], rawV: v });
+                    }
+
                     const columnasEstaticas = ["ACTIVIDAD MGA", "Codigo producto MGA", "Codigo CPC", "Subsecretaría"];
                     
                     let canEditCell = false;
@@ -1054,10 +1058,13 @@
                             let displayVal = validDate ? toDDMMAAAA(v) : (v || '&nbsp;');
                             td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${displayVal}</div><input type="date" class="cell-input plan-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" value="${validDate ? dateVal : ''}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
                         } else {
+                            if (cn === "Trasladar a Proyecto") {
+                                console.log("[DIAG-render]", { cn, rowId: r.ID, rValue: r[cn], computedV: v, branch: "contentEditable" });
+                            }
                             td.innerText = v;
                             td.contentEditable = true;
                             td.className = "plan-input";
-                            td.dataset.id = r.ID; 
+                            td.dataset.id = r.ID;
                             td.dataset.col = cn;
                         }
                     } else {
@@ -1260,12 +1267,15 @@
         function attachListeners(cls, data, func) {
             document.querySelectorAll('.'+cls).forEach(el => {
                 let evtType = (el.tagName === 'SELECT' || el.type === 'date') ? 'change' : 'blur';
-                
+
                 el.addEventListener(evtType, (e) => {
                     let rowId = e.target.dataset.id, c = e.target.dataset.col;
                     let i = data.findIndex(r => r.ID === rowId);
+                    if (c === "Trasladar a Proyecto") {
+                        console.log("[DIAG-blur]", { evtType, tagName: e.target.tagName, isContentEditable: e.target.isContentEditable, c, rowId, foundIdx: i, rawValue: e.target.value, innerText: e.target.innerText, textContent: e.target.textContent });
+                    }
                     if (i === -1) return;
-                    
+
                     let v = e.target.value !== undefined ? e.target.value : e.target.innerText.trim();
                     let originalV = v; let isNumeric = false;
                     
@@ -1286,12 +1296,20 @@
                     if(isNumeric && !isNaN(v) && v !== "") v = Number(v);
 
                     let oldVal = data[i][c]; if (oldVal === undefined) oldVal = "";
-                    
+
+                    if (c === "Trasladar a Proyecto") {
+                        console.log("[DIAG-compare]", { c, oldVal, newV: v, changed: oldVal !== v });
+                    }
+
                     if(oldVal !== v){
                         historyStack.push({ isAnexo: data === anexoData, id: data[i].ID, index: i, col: c, oldVal: oldVal, newVal: v });
-                        if (historyStack.length > 30) historyStack.shift(); 
-                        
+                        if (historyStack.length > 30) historyStack.shift();
+
                         data[i][c] = v; let id = data[i].ID; let del = data === appData ? planDeltas : anexoDeltas;
+
+                        if (c === "Trasladar a Proyecto") {
+                            console.log("[DIAG-saved]", { c, savedTo: data[i][c], rowIdAfter: data[i].ID });
+                        }
 
                         let activeFilters = data === appData ? activeColFiltersPlan : activeColFiltersAnexo;
                         if (activeFilters[c] && activeFilters[c].length > 0) {
