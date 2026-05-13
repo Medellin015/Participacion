@@ -1265,12 +1265,16 @@
         }
 
         function attachListeners(cls, data, func) {
+            let attachedCount = 0, contentEditableCount = 0;
             document.querySelectorAll('.'+cls).forEach(el => {
                 let evtType = (el.tagName === 'SELECT' || el.type === 'date') ? 'change' : 'blur';
+                attachedCount++;
+                if (el.isContentEditable) contentEditableCount++;
 
                 el.addEventListener(evtType, (e) => {
                     let rowId = e.target.dataset.id, c = e.target.dataset.col;
                     let i = data.findIndex(r => r.ID === rowId);
+                    console.log("[DIAG-anyEvent]", { evtType, tagName: e.target.tagName, c, isContentEditable: e.target.isContentEditable });
                     if (c === "Trasladar a Proyecto") {
                         console.log("[DIAG-blur]", { evtType, tagName: e.target.tagName, isContentEditable: e.target.isContentEditable, c, rowId, foundIdx: i, rawValue: e.target.value, innerText: e.target.innerText, textContent: e.target.textContent });
                     }
@@ -1358,10 +1362,11 @@
                         }
                         setTimeout(() => { func(); triggerAutoSave(); }, 0);
                     } else if (isNumeric && hasLetters) { 
-                        setTimeout(() => { func(); }, 0); 
+                        setTimeout(() => { func(); }, 0);
                     }
                 });
             });
+            console.log("[DIAG-attach]", { cls, attachedCount, contentEditableCount });
         }
 
         function copiarFilaPlan(id) {
