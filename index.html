@@ -1531,6 +1531,7 @@
             const saveBtn = document.getElementById('editRowSaveBtn');
             saveBtn.disabled = false;
             saveBtn.style.background = '';
+            saveBtn.style.borderColor = '';
             saveBtn.innerText = '💾 Guardar';
             document.getElementById('editRowModal').style.display = 'flex';
         }
@@ -1549,7 +1550,8 @@
             const statusEl = document.getElementById('editRowStatus');
             saveBtn.disabled = true;
             saveBtn.style.background = 'var(--danger)';
-            saveBtn.innerText = '⏳ Guardando... NO CIERRES LA VENTANA';
+            saveBtn.style.borderColor = 'var(--danger)';
+            // Mantén el texto del botón intacto; el aviso va solo en el statusEl
             statusEl.style.color = 'var(--danger)';
             statusEl.style.fontWeight = '700';
             statusEl.innerText = '⏳ Guardando, espera por favor...';
@@ -1619,7 +1621,7 @@
                         Object.assign(data[idx], record, { ID: finalId });
                     }
                     saveBtn.style.background = '';
-                    saveBtn.innerText = '💾 Guardar';
+                    saveBtn.style.borderColor = '';
                     statusEl.style.color = 'var(--success)';
                     statusEl.style.fontWeight = '700';
                     statusEl.innerText = '✅ Guardado';
@@ -1633,14 +1635,14 @@
                     }, 400);
                 } else {
                     saveBtn.style.background = '';
-                    saveBtn.innerText = '💾 Guardar';
+                    saveBtn.style.borderColor = '';
                     statusEl.style.color = 'var(--danger)';
                     statusEl.innerText = '❌ ' + (result.message || 'Error desconocido');
                     saveBtn.disabled = false;
                 }
             } catch (err) {
                 saveBtn.style.background = '';
-                saveBtn.innerText = '💾 Guardar';
+                saveBtn.style.borderColor = '';
                 statusEl.style.color = 'var(--danger)';
                 let hint = '';
                 const msg = (err && err.message ? err.message : String(err)).toLowerCase();
