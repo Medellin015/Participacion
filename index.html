@@ -1602,17 +1602,32 @@
                     requestId: generateUUID()
                 };
 
-                const ctrl = new AbortController();
-                const timeoutId = setTimeout(() => ctrl.abort(), 45000);
-                const response = await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    body: JSON.stringify(payload),
-                    signal: ctrl.signal
-                });
-                clearTimeout(timeoutId);
-                const result = await response.json();
+                // Reintenta automáticamente si el backend responde "candado/lock ocupado"
+                const isLockBusyError = (msg) => /candado|lock|wait.*timed?\s*out|ocupada/i.test(String(msg || ''));
+                let result = null;
+                let attempt = 0;
+                const maxAttempts = 4;
+                while (attempt < maxAttempts) {
+                    attempt++;
+                    if (attempt > 1) {
+                        statusEl.innerText = '⏳ Reintentando guardado (' + attempt + '/' + maxAttempts + ')...';
+                        await new Promise(r => setTimeout(r, 2000 * (attempt - 1)));
+                    }
+                    const ctrl = new AbortController();
+                    const timeoutId = setTimeout(() => ctrl.abort(), 45000);
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                        signal: ctrl.signal
+                    });
+                    clearTimeout(timeoutId);
+                    result = await response.json();
+                    if (result.status === 'success') break;
+                    if (!isLockBusyError(result.message)) break;
+                    // si es error de candado, deja loopear para reintentar
+                }
 
-                if (result.status === 'success') {
+                if (result && result.status === 'success') {
                     // Aplicar cambios locales (optimista)
                     const data = editingDataType === 'plan' ? appData : anexoData;
                     const idx = data.findIndex(r => r.ID === editingRowId);
