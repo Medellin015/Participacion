@@ -99,6 +99,25 @@
         th.dragging { opacity: 0.6; background-color: #e2e8f0; border: 2px dashed var(--primary); }
         th.drag-over { border-left: 4px solid var(--primary) !important; background-color: #e0f2fe; }
         body.is-dragging th * { pointer-events: none; }
+
+        /* Modal de edición de fila */
+        .modal-edit { width: 95%; max-width: 1100px; max-height: 92vh; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+        .modal-edit-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
+        .modal-edit-header h3 { margin: 0; font-size: 17px; color: var(--text-main); }
+        .modal-edit-header .close-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--text-muted); padding: 4px 8px; border-radius: 6px; }
+        .modal-edit-header .close-btn:hover { background: #e2e8f0; color: var(--text-main); }
+        .modal-edit-body { padding: 20px 24px; flex: 1; overflow-y: auto; }
+        .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-group label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+        .field-group input, .field-group select, .field-group textarea { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px; font-family: inherit; outline: none; background: white; transition: border-color 0.15s; }
+        .field-group input:focus, .field-group select:focus, .field-group textarea:focus { border-color: var(--primary); }
+        .field-group input:disabled, .field-group input[readonly], .field-group select:disabled { background: #f1f5f9; color: var(--text-muted); cursor: not-allowed; }
+        .field-group textarea { min-height: 60px; resize: vertical; }
+        .field-group.full-width { grid-column: 1 / -1; }
+        .modal-edit-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; }
+        .btn-edit-row { background-color: #ecfeff; color: var(--info); border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; font-weight: bold; margin-right: 4px; }
+        .btn-edit-row:hover { background-color: var(--info); color: white; }
     </style>
 </head>
 <body>
@@ -278,6 +297,25 @@
         </div>
     </div>
     
+    <div class="modal-overlay" id="editRowModal">
+        <div class="modal modal-edit">
+            <div class="modal-edit-header">
+                <h3 id="editRowModalTitle">Editar fila</h3>
+                <button class="close-btn" onclick="closeEditRowModal()" title="Cerrar">✖</button>
+            </div>
+            <form id="editRowForm" onsubmit="guardarFilaModal(event)">
+                <div class="modal-edit-body">
+                    <div id="editRowFields" class="field-grid"></div>
+                </div>
+                <div class="modal-edit-footer">
+                    <span id="editRowStatus" style="margin-right: auto; font-size: 13px; color: var(--text-muted);"></span>
+                    <button type="button" class="btn btn-outline" onclick="closeEditRowModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="editRowSaveBtn">💾 Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="toast">✅ Deshecho</div>
 
     <script>
@@ -1002,15 +1040,9 @@
                     if (css) td.style.cssText = css;
 
                     const columnasEstaticas = ["ACTIVIDAD MGA", "Codigo producto MGA", "Codigo CPC", "Subsecretaría"];
-                    
+
+                    // Edición ahora ocurre vía modal (botón ✏️), las celdas son de solo lectura
                     let canEditCell = false;
-                    if (canRow && !columnasEstaticas.includes(cn)) {
-                        if (currentRole === 'Equipo de Contratación') {
-                            canEditCell = true;
-                        } else if (cn === "Actividad detallada") {
-                            canEditCell = true;
-                        }
-                    }
 
                     if(canEditCell){
                         if (cn === "Actividad detallada") {
@@ -1069,10 +1101,13 @@
                     tr.appendChild(td);
                 });
                 
-                let actionTd = document.createElement('td'); 
+                let actionTd = document.createElement('td');
                 actionTd.style.whiteSpace = 'nowrap';
+                if (canRow && currentRole !== 'Invitado') {
+                    actionTd.innerHTML = `<button class="btn-edit-row" onclick="abrirEditorFila('plan', '${r.ID}')" title="Editar fila">✏️</button>`;
+                }
                 if(currentRole === 'Equipo de Contratación') {
-                    actionTd.innerHTML = `<button class="btn-copy" onclick="copiarFilaPlan('${r.ID}')" title="Duplicar Fila">📋</button><button class="btn-delete" onclick="eliminarFila('Plan', '${r.ID}')" title="Eliminar Fila">❌</button>`;
+                    actionTd.innerHTML += `<button class="btn-copy" onclick="copiarFilaPlan('${r.ID}')" title="Duplicar Fila">📋</button><button class="btn-delete" onclick="eliminarFila('Plan', '${r.ID}')" title="Eliminar Fila">❌</button>`;
                 }
                 tr.appendChild(actionTd); tbody.appendChild(tr);
             });
@@ -1138,7 +1173,7 @@
                     let css = getColCss(cn);
                     if (css) td.style.cssText = css;
 
-                    if(can && cn !== "COSTO UNITARIO" && cn !== "Subsecretaría"){
+                    if(false && can && cn !== "COSTO UNITARIO" && cn !== "Subsecretaría"){
                         if(columnasMixtas.includes(cn)){
                             let dlId = 'list-' + cn.replace(/\s+/g, '');
                             td.innerHTML = `<div class="cell-display" onclick="this.style.display='none'; this.nextElementSibling.style.display='block'; this.nextElementSibling.focus();">${v || '&nbsp;'}</div><input type="text" class="cell-input anexo-input" style="display:none;" data-id="${r.ID}" data-col="${cn}" list="${dlId}" value="${v}" onblur="this.style.display='none'; this.previousElementSibling.style.display='block';">`;
@@ -1174,7 +1209,14 @@
                     tr.appendChild(td);
                 });
                 
-                let delTd = document.createElement('td'); if(can) delTd.innerHTML = `<button class="btn-delete" onclick="eliminarFila('Anexo', '${r.ID}')">❌</button>`;
+                let delTd = document.createElement('td');
+                delTd.style.whiteSpace = 'nowrap';
+                if (can && currentRole !== 'Invitado') {
+                    delTd.innerHTML = `<button class="btn-edit-row" onclick="abrirEditorFila('anexo', '${r.ID}')" title="Editar fila">✏️</button>`;
+                }
+                if (can) {
+                    delTd.innerHTML += `<button class="btn-delete" onclick="eliminarFila('Anexo', '${r.ID}')">❌</button>`;
+                }
                 tr.appendChild(delTd); tbody.appendChild(tr);
             });
             
@@ -1360,6 +1402,223 @@
                 });
             });
         }
+
+        // ============== EDITOR DE FILA (MODAL) ==============
+        let editingRowId = null;
+        let editingDataType = null; // 'plan' o 'anexo'
+
+        function escapeHtml(s) {
+            return String(s ?? '').replace(/[&<>"']/g, function(c) {
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+            });
+        }
+
+        function buildEditField(col, val, row, type) {
+            const colEsc = escapeHtml(col);
+            const valStr = val === undefined || val === null ? '' : String(val);
+            const valEsc = escapeHtml(valStr);
+
+            const planStaticCols = ["ACTIVIDAD MGA", "Codigo producto MGA", "Codigo CPC", "Subsecretaría"];
+            const anexoStaticCols = ["COSTO UNITARIO"];
+            const isStatic = (type === 'plan' && planStaticCols.includes(col)) ||
+                             (type === 'anexo' && anexoStaticCols.includes(col)) ||
+                             col === 'ID';
+            const disabledAttr = isStatic ? 'readonly' : '';
+
+            if (columnasMoneda.includes(col)) {
+                const display = val !== '' && val !== null && val !== undefined ? formatMoneda(val) : '';
+                return `<input type="text" data-col="${colEsc}" data-currency="1" value="${escapeHtml(display)}" ${disabledAttr}>`;
+            }
+            if (columnasFecha.includes(col)) {
+                let dateVal = val ? toYYYYMMDD(val) : '';
+                let valid = /^\d{4}-\d{2}-\d{2}$/.test(dateVal);
+                if (valid) {
+                    return `<input type="date" data-col="${colEsc}" value="${escapeHtml(dateVal)}" ${disabledAttr}>`;
+                }
+                return `<input type="text" data-col="${colEsc}" value="${valEsc}" placeholder="yyyy-mm-dd o texto" ${disabledAttr}>`;
+            }
+            if (columnasNumericas.includes(col)) {
+                return `<input type="number" data-col="${colEsc}" value="${valEsc}" step="any" ${disabledAttr}>`;
+            }
+            // Dependencias dinámicas: "Actividad detallada" depende de Proyecto (anexoData)
+            if (type === 'plan' && col === 'Actividad detallada') {
+                const proyecto = row['Proyecto'];
+                const activities = new Set();
+                if (proyecto) {
+                    anexoData.forEach(ar => {
+                        if (String(ar.Proyecto) === String(proyecto) && ar["ACTIVIDADES DETALLADAS"]) {
+                            activities.add(ar["ACTIVIDADES DETALLADAS"]);
+                        }
+                    });
+                }
+                let opts = '<option value=""></option>';
+                let found = false;
+                Array.from(activities).sort().forEach(o => {
+                    const sel = String(valStr).trim() === String(o).trim();
+                    if (sel) found = true;
+                    opts += `<option value="${escapeHtml(o)}" ${sel ? 'selected' : ''}>${escapeHtml(o)}</option>`;
+                });
+                if (valStr !== '' && !found) opts += `<option value="${valEsc}" selected>${valEsc}</option>`;
+                return `<select data-col="${colEsc}" ${disabledAttr}>${opts}</select>`;
+            }
+            // Listas desplegables o dependencias
+            const hasList = listasDesplegables[col] && listasDesplegables[col].length > 0;
+            const dependencyKey = dependenciasColumna[col];
+            if (hasList || (dependencyKey && mapasDependientes[dependencyKey]?.[row.Proyecto])) {
+                const list = hasList
+                    ? listasDesplegables[col]
+                    : (mapasDependientes[dependencyKey]?.[row.Proyecto] || []);
+                let opts = '<option value=""></option>';
+                let found = false;
+                list.forEach(o => {
+                    const sel = String(valStr).trim() === String(o).trim();
+                    if (sel) found = true;
+                    opts += `<option value="${escapeHtml(o)}" ${sel ? 'selected' : ''}>${escapeHtml(o)}</option>`;
+                });
+                if (valStr !== '' && !found) opts += `<option value="${valEsc}" selected>${valEsc}</option>`;
+                return `<select data-col="${colEsc}" ${disabledAttr}>${opts}</select>`;
+            }
+            // Mixtas: input con datalist
+            if (columnasMixtas.includes(col)) {
+                const dlId = 'list-' + col.replace(/\s+/g, '');
+                return `<input type="text" list="${dlId}" data-col="${colEsc}" value="${valEsc}" ${disabledAttr}>`;
+            }
+            // Texto largo (multilínea)
+            const longTextCols = ['Objeto', 'Observación', 'Necesidad', 'Estudio Previo', 'Actividad detallada', 'ACTIVIDADES DETALLADAS'];
+            if (longTextCols.includes(col)) {
+                return `<textarea data-col="${colEsc}" ${disabledAttr}>${valEsc}</textarea>`;
+            }
+            // Texto plano
+            return `<input type="text" data-col="${colEsc}" value="${valEsc}" ${disabledAttr}>`;
+        }
+
+        function abrirEditorFila(type, id) {
+            const data = type === 'plan' ? appData : anexoData;
+            const headers = type === 'plan' ? predefinedHeaders : anexoHeaders;
+            const row = data.find(r => r.ID === id);
+            if (!row) { mostrarNotificacion('⚠️ Fila no encontrada'); return; }
+
+            editingRowId = id;
+            editingDataType = type;
+
+            const container = document.getElementById('editRowFields');
+            container.innerHTML = '';
+
+            headers.forEach(col => {
+                const val = row[col] ?? '';
+                const fieldHTML = buildEditField(col, val, row, type);
+                const fullWidth = ['Objeto', 'Observación', 'Necesidad', 'Estudio Previo', 'ACTIVIDADES DETALLADAS'].includes(col);
+                const group = document.createElement('div');
+                group.className = 'field-group' + (fullWidth ? ' full-width' : '');
+                group.innerHTML = `<label>${escapeHtml(col)}</label>${fieldHTML}`;
+                container.appendChild(group);
+            });
+
+            document.getElementById('editRowModalTitle').innerText = 'Editar fila (' + (type === 'plan' ? 'Plan de Compras' : 'Anexo Presupuestal') + ')';
+            document.getElementById('editRowStatus').innerText = '';
+            document.getElementById('editRowSaveBtn').disabled = false;
+            document.getElementById('editRowModal').style.display = 'flex';
+        }
+
+        function closeEditRowModal() {
+            document.getElementById('editRowModal').style.display = 'none';
+            editingRowId = null;
+            editingDataType = null;
+        }
+
+        async function guardarFilaModal(e) {
+            e.preventDefault();
+            if (!editingRowId || !editingDataType) return;
+
+            const saveBtn = document.getElementById('editRowSaveBtn');
+            const statusEl = document.getElementById('editRowStatus');
+            saveBtn.disabled = true;
+            statusEl.style.color = 'var(--text-muted)';
+            statusEl.innerText = '⏳ Guardando...';
+
+            // Construir record
+            const record = { ID: editingRowId };
+            document.querySelectorAll('#editRowFields [data-col]').forEach(el => {
+                const col = el.dataset.col;
+                let val = el.value;
+                if (el.dataset.currency === '1') {
+                    val = String(val).replace(/\D/g, '');
+                    val = val !== '' ? Number(val) : 0;
+                } else if (columnasNumericas.includes(col)) {
+                    val = val === '' ? '' : Number(val);
+                }
+                record[col] = val;
+            });
+
+            // Sincronizar campos automáticos (Plan)
+            if (editingDataType === 'plan') {
+                if (record['Actividad detallada']) {
+                    const proyecto = record['Proyecto'];
+                    const match = anexoData.find(r => String(r.Proyecto) === String(proyecto) &&
+                                                      String(r['ACTIVIDADES DETALLADAS']).trim() === String(record['Actividad detallada']).trim());
+                    if (match) {
+                        record['ACTIVIDAD MGA'] = match['ACTIVIDAD MGA'] || '';
+                        record['Codigo producto MGA'] = match['CÓDIGO PRODUCTO MGA'] || '';
+                        record['Codigo CPC'] = match['Clasificador CPC'] || '';
+                    }
+                }
+                if (record['Proyecto'] && mapaProySubse[record['Proyecto']]) {
+                    record['Subsecretaría'] = mapaProySubse[record['Proyecto']];
+                }
+            }
+
+            // Recalcular costo unitario (Anexo)
+            if (editingDataType === 'anexo') {
+                const q = Number(record['CANTIDAD']) || 0;
+                const t = Number(record['COSTO TOTAL']) || 0;
+                record['COSTO UNITARIO'] = q > 0 ? t / q : 0;
+            }
+
+            try {
+                const payload = {
+                    action: 'save',
+                    type: editingDataType,
+                    record: record,
+                    requestId: generateUUID()
+                };
+
+                const ctrl = new AbortController();
+                const timeoutId = setTimeout(() => ctrl.abort(), 15000);
+                const response = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                    signal: ctrl.signal
+                });
+                clearTimeout(timeoutId);
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Aplicar cambios locales
+                    const data = editingDataType === 'plan' ? appData : anexoData;
+                    const idx = data.findIndex(r => r.ID === editingRowId);
+                    const finalId = result.id || record.ID;
+                    if (idx !== -1) {
+                        Object.assign(data[idx], record, { ID: finalId });
+                    }
+                    statusEl.style.color = 'var(--success)';
+                    statusEl.innerText = '✅ Guardado';
+                    setTimeout(() => {
+                        closeEditRowModal();
+                        if (editingDataType === 'plan') renderTable(); else renderAnexoTable();
+                        mostrarNotificacion('✅ Cambios guardados');
+                    }, 400);
+                } else {
+                    statusEl.style.color = 'var(--danger)';
+                    statusEl.innerText = '❌ ' + (result.message || 'Error desconocido');
+                    saveBtn.disabled = false;
+                }
+            } catch (err) {
+                statusEl.style.color = 'var(--danger)';
+                statusEl.innerText = '❌ Error de conexión: ' + err.message;
+                saveBtn.disabled = false;
+            }
+        }
+        // ============== FIN EDITOR DE FILA ==============
 
         function copiarFilaPlan(id) {
             let idx = appData.findIndex(r => r.ID === id);
