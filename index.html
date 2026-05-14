@@ -1524,8 +1524,14 @@
             });
 
             document.getElementById('editRowModalTitle').innerText = 'Editar fila (' + (type === 'plan' ? 'Plan de Compras' : 'Anexo Presupuestal') + ')';
-            document.getElementById('editRowStatus').innerText = '';
-            document.getElementById('editRowSaveBtn').disabled = false;
+            const statusEl = document.getElementById('editRowStatus');
+            statusEl.innerText = '';
+            statusEl.style.fontWeight = '';
+            statusEl.style.color = 'var(--text-muted)';
+            const saveBtn = document.getElementById('editRowSaveBtn');
+            saveBtn.disabled = false;
+            saveBtn.style.background = '';
+            saveBtn.innerText = '💾 Guardar';
             document.getElementById('editRowModal').style.display = 'flex';
         }
 
@@ -1542,8 +1548,11 @@
             const saveBtn = document.getElementById('editRowSaveBtn');
             const statusEl = document.getElementById('editRowStatus');
             saveBtn.disabled = true;
-            statusEl.style.color = 'var(--text-muted)';
-            statusEl.innerText = '⏳ Guardando...';
+            saveBtn.style.background = 'var(--danger)';
+            saveBtn.innerText = '⏳ Guardando... NO CIERRES LA VENTANA';
+            statusEl.style.color = 'var(--danger)';
+            statusEl.style.fontWeight = '700';
+            statusEl.innerText = '⏳ Guardando, espera por favor...';
 
             // Construir record
             const record = { ID: editingRowId };
@@ -1609,7 +1618,10 @@
                     if (idx !== -1) {
                         Object.assign(data[idx], record, { ID: finalId });
                     }
+                    saveBtn.style.background = '';
+                    saveBtn.innerText = '💾 Guardar';
                     statusEl.style.color = 'var(--success)';
+                    statusEl.style.fontWeight = '700';
                     statusEl.innerText = '✅ Guardado';
                     const dt = editingDataType; // capturar ANTES de cerrar el modal
                     setTimeout(() => {
@@ -1620,11 +1632,15 @@
                         cargarDatosDesdeGoogle().catch(() => {});
                     }, 400);
                 } else {
+                    saveBtn.style.background = '';
+                    saveBtn.innerText = '💾 Guardar';
                     statusEl.style.color = 'var(--danger)';
                     statusEl.innerText = '❌ ' + (result.message || 'Error desconocido');
                     saveBtn.disabled = false;
                 }
             } catch (err) {
+                saveBtn.style.background = '';
+                saveBtn.innerText = '💾 Guardar';
                 statusEl.style.color = 'var(--danger)';
                 statusEl.innerText = '❌ Error de conexión: ' + err.message;
                 saveBtn.disabled = false;
