@@ -101,21 +101,22 @@
         body.is-dragging th * { pointer-events: none; }
 
         /* Modal de edición de fila */
-        .modal-edit { width: 95%; max-width: 1100px; max-height: 92vh; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
-        .modal-edit-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
+        .modal-edit { width: 95%; max-width: 1100px; height: 92vh; max-height: 92vh; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+        #editRowForm { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+        .modal-edit-header { flex: 0 0 auto; padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
         .modal-edit-header h3 { margin: 0; font-size: 17px; color: var(--text-main); }
         .modal-edit-header .close-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--text-muted); padding: 4px 8px; border-radius: 6px; }
         .modal-edit-header .close-btn:hover { background: #e2e8f0; color: var(--text-main); }
-        .modal-edit-body { padding: 20px 24px; flex: 1; overflow-y: auto; }
+        .modal-edit-body { flex: 1 1 auto; min-height: 0; padding: 20px 24px; overflow-y: auto; overflow-x: hidden; }
         .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
-        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
         .field-group label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
-        .field-group input, .field-group select, .field-group textarea { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px; font-family: inherit; outline: none; background: white; transition: border-color 0.15s; }
+        .field-group input, .field-group select, .field-group textarea { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px; font-family: inherit; outline: none; background: white; transition: border-color 0.15s; width: 100%; box-sizing: border-box; }
         .field-group input:focus, .field-group select:focus, .field-group textarea:focus { border-color: var(--primary); }
         .field-group input:disabled, .field-group input[readonly], .field-group select:disabled { background: #f1f5f9; color: var(--text-muted); cursor: not-allowed; }
         .field-group textarea { min-height: 60px; resize: vertical; }
         .field-group.full-width { grid-column: 1 / -1; }
-        .modal-edit-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; }
+        .modal-edit-footer { flex: 0 0 auto; padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; align-items: center; gap: 10px; background: #f8fafc; }
         .btn-edit-row { background-color: #ecfeff; color: var(--info); border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; font-weight: bold; margin-right: 4px; }
         .btn-edit-row:hover { background-color: var(--info); color: white; }
     </style>
