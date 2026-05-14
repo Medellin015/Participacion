@@ -119,6 +119,12 @@
         .modal-edit-footer { flex: 0 0 auto; padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; align-items: center; gap: 10px; background: #f8fafc; }
         .btn-edit-row { background-color: #ecfeff; color: var(--info); border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; font-weight: bold; margin-right: 4px; }
         .btn-edit-row:hover { background-color: var(--info); color: white; }
+
+        /* Columna de acciones flotante (sticky a la derecha) */
+        .sticky-action-th { position: sticky; right: 0; top: 0; z-index: 11; background: #cbd5e1; box-shadow: -3px 0 6px rgba(0,0,0,0.08); }
+        .sticky-action-td { position: sticky; right: 0; z-index: 5; box-shadow: -3px 0 6px rgba(0,0,0,0.08); }
+        .row-editable .sticky-action-td { background: var(--editable-bg); }
+        .row-locked .sticky-action-td { background: var(--locked-bg); }
     </style>
 </head>
 <body>
@@ -1000,7 +1006,7 @@
                         </div>
                       </th>`;
             });
-            h += '<th style="width: 75px; text-align: center;">⚙️</th></tr>'; 
+            h += '<th class="sticky-action-th" style="width: 95px; text-align: center;">⚙️</th></tr>';
             document.getElementById('tableHead').innerHTML = h; tbody.innerHTML = '';
             
             let vis = 0, tot = 0; 
@@ -1103,6 +1109,7 @@
                 });
                 
                 let actionTd = document.createElement('td');
+                actionTd.className = 'sticky-action-td';
                 actionTd.style.whiteSpace = 'nowrap';
                 if (canRow && currentRole !== 'Invitado') {
                     actionTd.innerHTML = `<button class="btn-edit-row" onclick="abrirEditorFila('plan', '${r.ID}')" title="Editar fila">✏️</button>`;
@@ -1141,7 +1148,7 @@
                         </div>
                       </th>`;
             });
-            h += '<th style="width: 40px;">🗑️</th></tr>'; 
+            h += '<th class="sticky-action-th" style="width: 80px; text-align: center;">⚙️</th></tr>'; 
             document.getElementById('anexoTableHead').innerHTML = h; tbody.innerHTML = '';
             
             let totAnex = 0, fP = document.getElementById('filterProyectoAnexo').value;
@@ -1211,6 +1218,7 @@
                 });
                 
                 let delTd = document.createElement('td');
+                delTd.className = 'sticky-action-td';
                 delTd.style.whiteSpace = 'nowrap';
                 if (can && currentRole !== 'Invitado') {
                     delTd.innerHTML = `<button class="btn-edit-row" onclick="abrirEditorFila('anexo', '${r.ID}')" title="Editar fila">✏️</button>`;
@@ -1594,7 +1602,7 @@
                 const result = await response.json();
 
                 if (result.status === 'success') {
-                    // Aplicar cambios locales
+                    // Aplicar cambios locales (optimista)
                     const data = editingDataType === 'plan' ? appData : anexoData;
                     const idx = data.findIndex(r => r.ID === editingRowId);
                     const finalId = result.id || record.ID;
@@ -1603,10 +1611,13 @@
                     }
                     statusEl.style.color = 'var(--success)';
                     statusEl.innerText = '✅ Guardado';
+                    const dt = editingDataType; // capturar ANTES de cerrar el modal
                     setTimeout(() => {
                         closeEditRowModal();
-                        if (editingDataType === 'plan') renderTable(); else renderAnexoTable();
+                        if (dt === 'plan') renderTable(); else renderAnexoTable();
                         mostrarNotificacion('✅ Cambios guardados');
+                        // Re-sincronizar con el servidor en segundo plano para garantizar consistencia
+                        cargarDatosDesdeGoogle().catch(() => {});
                     }, 400);
                 } else {
                     statusEl.style.color = 'var(--danger)';
