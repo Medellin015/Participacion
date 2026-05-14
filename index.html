@@ -1601,7 +1601,7 @@
                 };
 
                 const ctrl = new AbortController();
-                const timeoutId = setTimeout(() => ctrl.abort(), 15000);
+                const timeoutId = setTimeout(() => ctrl.abort(), 45000);
                 const response = await fetch(WEB_APP_URL, {
                     method: 'POST',
                     body: JSON.stringify(payload),
@@ -1628,8 +1628,8 @@
                         closeEditRowModal();
                         if (dt === 'plan') renderTable(); else renderAnexoTable();
                         mostrarNotificacion('✅ Cambios guardados');
-                        // Re-sincronizar con el servidor en segundo plano para garantizar consistencia
-                        cargarDatosDesdeGoogle().catch(() => {});
+                        // Re-sincronizar con el servidor 3s después para no chocar con el lock del backend
+                        setTimeout(() => { cargarDatosDesdeGoogle().catch(err => console.warn('Re-fetch falló:', err)); }, 3000);
                     }, 400);
                 } else {
                     saveBtn.style.background = '';
@@ -1642,7 +1642,12 @@
                 saveBtn.style.background = '';
                 saveBtn.innerText = '💾 Guardar';
                 statusEl.style.color = 'var(--danger)';
-                statusEl.innerText = '❌ Error de conexión: ' + err.message;
+                let hint = '';
+                const msg = (err && err.message ? err.message : String(err)).toLowerCase();
+                if (msg.indexOf('fetch') !== -1 || msg.indexOf('cors') !== -1 || msg.indexOf('aborted') !== -1 || msg.indexOf('network') !== -1) {
+                    hint = ' — Revisa el Apps Script: Deploy → Manage deployments → New version, con "Execute as: Me" y "Who has access: Anyone".';
+                }
+                statusEl.innerText = '❌ Error de conexión: ' + err.message + hint;
                 saveBtn.disabled = false;
             }
         }
