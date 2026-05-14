@@ -731,20 +731,33 @@
 
         function updateFilterOptions() {
             const p1 = new Set(), posprePlanSet = new Set();
-            appData.forEach(r => { 
-                if(r.Proyecto) p1.add(r.Proyecto); 
+            appData.forEach(r => {
+                if(r.Proyecto) p1.add(r.Proyecto);
                 if(r["Posición Presupuestaría"]) posprePlanSet.add(r["Posición Presupuestaría"]);
             });
             const selP = document.getElementById('filterProyecto'), selPosprePlan = document.getElementById('filterPosprePlan');
-            if(selP) selP.innerHTML = '<option value="">Todos los Proyectos</option>' + Array.from(p1).sort().map(p => `<option value="${p}">${p}</option>`).join('');
-            if(selPosprePlan) selPosprePlan.innerHTML = '<option value="">Todos los POSPRE</option>' + Array.from(posprePlanSet).sort().map(p => `<option value="${p}">${p}</option>`).join('');
+            // Preserva la selección actual antes de reescribir las opciones
+            const prevP = selP ? selP.value : '';
+            const prevPospre = selPosprePlan ? selPosprePlan.value : '';
+            if(selP) {
+                const opts = Array.from(p1).sort();
+                selP.innerHTML = '<option value="">Todos los Proyectos</option>' + opts.map(p => `<option value="${p}">${p}</option>`).join('');
+                if (prevP && opts.includes(prevP)) selP.value = prevP;
+            }
+            if(selPosprePlan) {
+                const opts = Array.from(posprePlanSet).sort();
+                selPosprePlan.innerHTML = '<option value="">Todos los POSPRE</option>' + opts.map(p => `<option value="${p}">${p}</option>`).join('');
+                if (prevPospre && opts.includes(prevPospre)) selPosprePlan.value = prevPospre;
+            }
             
             const p2 = new Set(); anexoData.forEach(r => { if(r.Proyecto) p2.add(r.Proyecto); });
             const selPA = document.getElementById('filterProyectoAnexo');
             if(selPA) {
+                const prevPA = selPA.value;
                 let opts = Array.from(p2).sort();
                 selPA.innerHTML = opts.map(p => `<option value="${p}">${p}</option>`).join('');
-                if(opts.length > 0 && !selPA.value) selPA.value = opts[0];
+                if (prevPA && opts.includes(prevPA)) selPA.value = prevPA;
+                else if(opts.length > 0 && !selPA.value) selPA.value = opts[0];
                 
                 let fP = selPA.value;
                 let aSet = new Set();
@@ -1646,7 +1659,8 @@
                         if (dt === 'plan') renderTable(); else renderAnexoTable();
                         mostrarNotificacion('✅ Cambios guardados');
                         // Re-sincronizar con el servidor 3s después para no chocar con el lock del backend
-                        setTimeout(() => { cargarDatosDesdeGoogle().catch(err => console.warn('Re-fetch falló:', err)); }, 3000);
+                        // NOTA: no auto-recargamos del servidor. El cambio ya quedó en local
+                        // y en sheets. La recarga ocurre solo en F5 o con el botón 🔄 Recargar.
                     }, 400);
                 } else {
                     saveBtn.style.background = '';
@@ -1726,7 +1740,7 @@
                         if (result.id && result.id !== n.ID) n.ID = result.id;
                         updateSaveStatus('saved');
                         mostrarNotificacion('✅ Fila duplicada');
-                        setTimeout(() => { cargarDatosDesdeGoogle().catch(()=>{}); }, 2000);
+                        // No auto-recargar del servidor; los datos ya están en local.
                     } else {
                         // revertir
                         const i2 = appData.findIndex(r => r.ID === n.ID);
@@ -1780,7 +1794,7 @@
                         if (result.id && result.id !== n.ID) n.ID = result.id;
                         updateSaveStatus('saved');
                         mostrarNotificacion('✅ Necesidad creada');
-                        setTimeout(() => { cargarDatosDesdeGoogle().catch(()=>{}); }, 2000);
+                        // No auto-recargar del servidor; los datos ya están en local.
                     } else {
                         const i2 = appData.findIndex(r => r.ID === n.ID);
                         if (i2 !== -1) appData.splice(i2, 1);
@@ -1833,7 +1847,7 @@
                         if (result.id && result.id !== n.ID) n.ID = result.id;
                         updateSaveStatus('saved');
                         mostrarNotificacion('✅ Fila creada en Anexo');
-                        setTimeout(() => { cargarDatosDesdeGoogle().catch(()=>{}); }, 2000);
+                        // No auto-recargar del servidor; los datos ya están en local.
                     } else {
                         const i2 = anexoData.findIndex(r => r.ID === n.ID);
                         if (i2 !== -1) anexoData.splice(i2, 1);
@@ -1871,7 +1885,7 @@
                     if (result && result.status === 'success') {
                         updateSaveStatus('saved');
                         mostrarNotificacion('✅ Fila eliminada');
-                        setTimeout(() => { cargarDatosDesdeGoogle().catch(()=>{}); }, 2000);
+                        // No auto-recargar del servidor; los datos ya están en local.
                     } else {
                         data.splice(idx, 0, backup); // revertir
                         renderFn();
