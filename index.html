@@ -1670,113 +1670,221 @@
         }
         // ============== FIN EDITOR DE FILA ==============
 
+        // ============== Helper: POST con reintentos automáticos en "candado ocupado" ==============
+        async function enviarAccionConReintentos(payload, opts = {}) {
+            const maxAttempts = opts.maxAttempts || 4;
+            const timeoutMs = opts.timeoutMs || 45000;
+            const isLockBusyError = (msg) => /candado|lock|wait.*timed?\s*out|ocupada/i.test(String(msg || ''));
+            let result = null;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                if (attempt > 1) await new Promise(r => setTimeout(r, 2000 * (attempt - 1)));
+                const ctrl = new AbortController();
+                const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+                try {
+                    const response = await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                        signal: ctrl.signal
+                    });
+                    clearTimeout(tid);
+                    result = await response.json();
+                    if (result.status === 'success') return result;
+                    if (!isLockBusyError(result.message)) return result;
+                } catch (err) {
+                    clearTimeout(tid);
+                    if (attempt === maxAttempts) throw err;
+                }
+            }
+            return result;
+        }
+
         function copiarFilaPlan(id) {
             let idx = appData.findIndex(r => r.ID === id);
             if (idx === -1) return;
-            
-            let original = appData[idx];
-            let n = { ID: generateUUID() };
-            
-            predefinedHeaders.forEach(c => {
-                n[c] = original[c] || "";
-            });
-            
+
+            const original = appData[idx];
+            const n = { ID: generateUUID() };
+            predefinedHeaders.forEach(c => { n[c] = original[c] || ""; });
+
+            // Inserción optimista local
             appData.splice(idx + 1, 0, n);
-            planDeltas.adds.push(n);
-            
             renderTable();
-            triggerAutoSave();
-            
+
             setTimeout(() => {
-                let filaNueva = document.querySelector(`#viewPlanCompras tr[data-rowid="${n.ID}"]`);
+                const filaNueva = document.querySelector(`#viewPlanCompras tr[data-rowid="${n.ID}"]`);
                 if (filaNueva) {
                     filaNueva.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    filaNueva.style.transition = 'background-color 0.5s'; 
+                    filaNueva.style.transition = 'background-color 0.5s';
                     filaNueva.style.backgroundColor = '#fef08a';
-                    setTimeout(() => { filaNueva.style.backgroundColor = ''; }, 2000);
                 }
-            }, 300);
+            }, 100);
+
+            updateSaveStatus('saving');
+            enviarAccionConReintentos({ action: 'save', type: 'plan', record: n, requestId: generateUUID() })
+                .then(result => {
+                    if (result && result.status === 'success') {
+                        if (result.id && result.id !== n.ID) n.ID = result.id;
+                        updateSaveStatus('saved');
+                        mostrarNotificacion('✅ Fila duplicada');
+                        setTimeout(() => { cargarDatosDesdeGoogle().catch(()=>{}); }, 2000);
+                    } else {
+                        // revertir
+                        const i2 = appData.findIndex(r => r.ID === n.ID);
+                        if (i2 !== -1) appData.splice(i2, 1);
+                        renderTable();
+                        updateSaveStatus('error');
+                        mostrarNotificacion('❌ No se pudo duplicar: ' + (result && result.message || 'error desconocido'));
+                    }
+                })
+                .catch(err => {
+                    const i2 = appData.findIndex(r => r.ID === n.ID);
+                    if (i2 !== -1) appData.splice(i2, 1);
+                    renderTable();
+                    updateSaveStatus('error');
+                    mostrarNotificacion('❌ No se pudo duplicar: ' + err.message);
+                });
         }
 
         function crearNecesidad(){
-            let n = { ID: generateUUID() }; predefinedHeaders.forEach(c => n[c] = "");
-            
-            let fP = document.getElementById('filterProyecto').value;
-            let fPosprePlan = document.getElementById('filterPosprePlan')?.value || "";
-            let idNuevo = n.ID;
-            
+            const n = { ID: generateUUID() };
+            predefinedHeaders.forEach(c => n[c] = "");
+
+            const fP = document.getElementById('filterProyecto').value;
+            const fPosprePlan = document.getElementById('filterPosprePlan')?.value || "";
+
             if(fPosprePlan) n["Posición Presupuestaría"] = fPosprePlan;
-            
+
+            let lastIndex = -1;
             if(fP) {
                 n["Proyecto"] = fP;
-                let lastIndex = -1;
                 for(let i = 0; i < appData.length; i++){ if(String(appData[i].Proyecto) === String(fP)) lastIndex = i; }
-                
-                if (mapaProySubse[fP]) {
-                    n["Subsecretaría"] = mapaProySubse[fP];
-                } else if(!n["Subsecretaría"] && lastIndex !== -1) { 
-                    n["Subsecretaría"] = appData[lastIndex]["Subsecretaría"] || ""; 
-                }
-                
-                if(lastIndex !== -1) appData.splice(lastIndex + 1, 0, n); else appData.push(n);
-            } else { 
-                appData.push(n); 
+                if (mapaProySubse[fP]) n["Subsecretaría"] = mapaProySubse[fP];
+                else if(!n["Subsecretaría"] && lastIndex !== -1) n["Subsecretaría"] = appData[lastIndex]["Subsecretaría"] || "";
             }
-            
-            planDeltas.adds.push(n); renderTable(); triggerAutoSave();
-            
+            if(lastIndex !== -1) appData.splice(lastIndex + 1, 0, n); else appData.push(n);
+
+            renderTable();
             setTimeout(() => {
-                let filaNueva = document.querySelector(`#viewPlanCompras tr[data-rowid="${idNuevo}"]`);
+                const filaNueva = document.querySelector(`#viewPlanCompras tr[data-rowid="${n.ID}"]`);
                 if (filaNueva) {
                     filaNueva.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    filaNueva.style.transition = 'background-color 0.5s'; filaNueva.style.backgroundColor = '#fef08a';
-                    setTimeout(() => { filaNueva.style.backgroundColor = ''; }, 2000);
+                    filaNueva.style.transition = 'background-color 0.5s';
+                    filaNueva.style.backgroundColor = '#fef08a';
                 }
-            }, 300);
+            }, 100);
+
+            updateSaveStatus('saving');
+            enviarAccionConReintentos({ action: 'save', type: 'plan', record: n, requestId: generateUUID() })
+                .then(result => {
+                    if (result && result.status === 'success') {
+                        if (result.id && result.id !== n.ID) n.ID = result.id;
+                        updateSaveStatus('saved');
+                        mostrarNotificacion('✅ Necesidad creada');
+                        setTimeout(() => { cargarDatosDesdeGoogle().catch(()=>{}); }, 2000);
+                    } else {
+                        const i2 = appData.findIndex(r => r.ID === n.ID);
+                        if (i2 !== -1) appData.splice(i2, 1);
+                        renderTable();
+                        updateSaveStatus('error');
+                        mostrarNotificacion('❌ No se pudo crear: ' + (result && result.message || 'error desconocido'));
+                    }
+                })
+                .catch(err => {
+                    const i2 = appData.findIndex(r => r.ID === n.ID);
+                    if (i2 !== -1) appData.splice(i2, 1);
+                    renderTable();
+                    updateSaveStatus('error');
+                    mostrarNotificacion('❌ No se pudo crear: ' + err.message);
+                });
         }
-        
+
         function crearFilaAnexo(){
-            let n = { ID: generateUUID() }; anexoHeaders.forEach(c => n[c] = "");
-            
-            let fP = document.getElementById('filterProyectoAnexo').value;
-            let fA = document.getElementById('filterActividadMGA')?.value || "";
-            let fPospre = document.getElementById('filterPospreAnexo')?.value || "";
-            
+            const n = { ID: generateUUID() };
+            anexoHeaders.forEach(c => n[c] = "");
+
+            const fP = document.getElementById('filterProyectoAnexo').value;
+            const fA = document.getElementById('filterActividadMGA')?.value || "";
+            const fPospre = document.getElementById('filterPospreAnexo')?.value || "";
+
             n["Proyecto"] = fP;
             if(fA) n["ACTIVIDAD MGA"] = fA;
             if(fPospre) n["Clasificador por objeto de gasto (POSPRE)"] = fPospre;
-            
-            if (mapaProySubse[fP]) {
-                n["Subsecretaría"] = mapaProySubse[fP];
-            }
-            
-            let idNuevo = n.ID;
+            if (mapaProySubse[fP]) n["Subsecretaría"] = mapaProySubse[fP];
+
             let lastIndex = -1;
             for(let i = 0; i < anexoData.length; i++){ if(String(anexoData[i].Proyecto) === String(fP)) lastIndex = i; }
-            if(!n["Subsecretaría"] && lastIndex !== -1) { n["Subsecretaría"] = anexoData[lastIndex]["Subsecretaría"] || ""; }
+            if(!n["Subsecretaría"] && lastIndex !== -1) n["Subsecretaría"] = anexoData[lastIndex]["Subsecretaría"] || "";
             if(lastIndex !== -1) anexoData.splice(lastIndex + 1, 0, n); else anexoData.push(n);
-            
-            anexoDeltas.adds.push(n); renderAnexoTable(); triggerAutoSave();
-            
+
+            renderAnexoTable();
             setTimeout(() => {
-                let filaNueva = document.querySelector(`#viewAnexoPresupuestal tr[data-rowid="${idNuevo}"]`);
+                const filaNueva = document.querySelector(`#viewAnexoPresupuestal tr[data-rowid="${n.ID}"]`);
                 if (filaNueva) {
                     filaNueva.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    filaNueva.style.transition = 'background-color 0.5s'; filaNueva.style.backgroundColor = '#fef08a';
-                    setTimeout(() => { filaNueva.style.backgroundColor = ''; }, 2000);
+                    filaNueva.style.transition = 'background-color 0.5s';
+                    filaNueva.style.backgroundColor = '#fef08a';
                 }
-            }, 300);
+            }, 100);
+
+            updateSaveStatus('saving');
+            enviarAccionConReintentos({ action: 'save', type: 'anexo', record: n, requestId: generateUUID() })
+                .then(result => {
+                    if (result && result.status === 'success') {
+                        if (result.id && result.id !== n.ID) n.ID = result.id;
+                        updateSaveStatus('saved');
+                        mostrarNotificacion('✅ Fila creada en Anexo');
+                        setTimeout(() => { cargarDatosDesdeGoogle().catch(()=>{}); }, 2000);
+                    } else {
+                        const i2 = anexoData.findIndex(r => r.ID === n.ID);
+                        if (i2 !== -1) anexoData.splice(i2, 1);
+                        renderAnexoTable();
+                        updateSaveStatus('error');
+                        mostrarNotificacion('❌ No se pudo crear: ' + (result && result.message || 'error desconocido'));
+                    }
+                })
+                .catch(err => {
+                    const i2 = anexoData.findIndex(r => r.ID === n.ID);
+                    if (i2 !== -1) anexoData.splice(i2, 1);
+                    renderAnexoTable();
+                    updateSaveStatus('error');
+                    mostrarNotificacion('❌ No se pudo crear: ' + err.message);
+                });
         }
-        
+
         function eliminarFila(t, id){
-            if(confirm("¿Eliminar?")){
-                let d = t==='Plan'?appData:anexoData, l = t==='Plan'?planDeltas:anexoDeltas;
-                let idx = d.findIndex(r => r.ID === id);
-                if (idx !== -1) {
-                    d.splice(idx,1); l.deletes.push(id); l.adds = l.adds.filter(x=>x.ID!==id); l.updates = l.updates.filter(x=>x.id!==id);
-                    t==='Plan'?renderTable():renderAnexoTable(); triggerAutoSave();
-                }
-            }
+            if(!confirm("¿Eliminar esta fila?")) return;
+            const type = t === 'Plan' ? 'plan' : 'anexo';
+            const data = type === 'plan' ? appData : anexoData;
+            const renderFn = type === 'plan' ? renderTable : renderAnexoTable;
+
+            const idx = data.findIndex(r => r.ID === id);
+            if (idx === -1) return;
+            const backup = data[idx];
+
+            // Eliminación optimista
+            data.splice(idx, 1);
+            renderFn();
+            updateSaveStatus('saving');
+
+            enviarAccionConReintentos({ action: 'delete', type: type, id: id, requestId: generateUUID() })
+                .then(result => {
+                    if (result && result.status === 'success') {
+                        updateSaveStatus('saved');
+                        mostrarNotificacion('✅ Fila eliminada');
+                        setTimeout(() => { cargarDatosDesdeGoogle().catch(()=>{}); }, 2000);
+                    } else {
+                        data.splice(idx, 0, backup); // revertir
+                        renderFn();
+                        updateSaveStatus('error');
+                        mostrarNotificacion('❌ No se pudo eliminar: ' + (result && result.message || 'error desconocido'));
+                    }
+                })
+                .catch(err => {
+                    data.splice(idx, 0, backup);
+                    renderFn();
+                    updateSaveStatus('error');
+                    mostrarNotificacion('❌ No se pudo eliminar: ' + err.message);
+                });
         }
         
         function onProyectoPlanChange(){ 
