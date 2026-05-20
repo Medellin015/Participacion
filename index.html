@@ -390,7 +390,7 @@
         //   correspondientes solo pueden tocar "Actividad detallada".
         // - Anexo: la subsecretaría correspondiente edita TODO, excepto
         //   Proyecto, Subsecretaría y COSTO UNITARIO (esta última es fórmula).
-        const planEditableNonAdmin = ["Actividad detallada"];
+        const planEditableNonAdmin = ["Actividad detallada", "Indicador Plan de Dllo (Solo producto)"];
         const adminOnlyAnexo = ["Proyecto", "Subsecretaría"];
 
         // Quita del record los campos que el sheets calcula con fórmula,
@@ -1656,13 +1656,17 @@
             }
 
             // Nunca enviamos columnas-fórmula al backend: las recalcula el sheets.
-            quitarColumnasFormula(record, editingDataType);
+            // PERO conservamos los valores derivados (ACTIVIDAD MGA, Codigo CPC, Codigo
+            // producto MGA, Subsecretaría) en el `record` local para que la UI los
+            // muestre inmediatamente. Al servidor le mandamos una copia sin esas columnas.
+            const recordRemoto = Object.assign({}, record);
+            quitarColumnasFormula(recordRemoto, editingDataType);
 
             try {
                 const payload = {
                     action: 'save',
                     type: editingDataType,
-                    record: record,
+                    record: recordRemoto,
                     requestId: generateUUID()
                 };
 
