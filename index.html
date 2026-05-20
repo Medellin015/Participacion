@@ -385,11 +385,13 @@
         const formulaColsPlan = ["Subsecretaría", "ACTIVIDAD MGA", "Codigo producto MGA", "Codigo CPC"];
         const formulaColsAnexo = ["COSTO UNITARIO"];
 
-        // Columnas que solo el Equipo de Contratación puede editar
-        const adminOnlyPlan = ["Proyecto"];
-        const adminOnlyAnexo = ["Subsecretaría", "Proyecto", "CÓDIGO PRODUCTO MGA", "PRODUCTO MGA",
-            "ACTIVIDAD MGA", "ACTIVIDADES DETALLADAS", "Clasificador CPC", "Validador sección CPC",
-            "VALIDADOR ¿REQUIERE CPC?", "Clasificador por objeto de gasto (POSPRE)"];
+        // Permisos en el modal:
+        // - Plan: solo Equipo de Contratación edita todo. Las subsecretarías
+        //   correspondientes solo pueden tocar "Actividad detallada".
+        // - Anexo: la subsecretaría correspondiente edita TODO, excepto
+        //   Proyecto, Subsecretaría y COSTO UNITARIO (esta última es fórmula).
+        const planEditableNonAdmin = ["Actividad detallada"];
+        const adminOnlyAnexo = ["Proyecto", "Subsecretaría"];
 
         // Quita del record los campos que el sheets calcula con fórmula,
         // para que el backend nunca los sobrescriba con un valor literal.
@@ -1462,11 +1464,15 @@
             // Bloqueo 1: columnas-fórmula del sheets (siempre solo lectura)
             const isFormulaCol = (type === 'plan' && formulaColsPlan.includes(col)) ||
                                  (type === 'anexo' && formulaColsAnexo.includes(col));
-            // Bloqueo 2: columnas que solo Equipo de Contratación puede editar
+            // Bloqueo 2: permisos por rol
+            //   Plan no-admin: solo puede tocar "Actividad detallada"
+            //   Anexo no-admin: no puede tocar Proyecto ni Subsecretaría
             const isAdmin = currentRole === 'Equipo de Contratación';
-            const isAdminOnly = !isAdmin && ((type === 'plan' && adminOnlyPlan.includes(col)) ||
-                                              (type === 'anexo' && adminOnlyAnexo.includes(col)));
-            const isStatic = isFormulaCol || isAdminOnly || col === 'ID';
+            const isLockedByRole = !isAdmin && (
+                (type === 'plan'  && !planEditableNonAdmin.includes(col)) ||
+                (type === 'anexo' && adminOnlyAnexo.includes(col))
+            );
+            const isStatic = isFormulaCol || isLockedByRole || col === 'ID';
             // readonly funciona para <input>/<textarea>; <select> necesita disabled
             const lockInput = isStatic ? 'readonly' : '';
             const lockSelect = isStatic ? 'disabled' : '';
