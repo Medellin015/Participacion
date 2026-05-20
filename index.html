@@ -376,9 +376,28 @@
         let dynamicAnexoHeaders = [...anexoHeaders];
 
         const columnasMoneda = ["Valor Unitario", "COSTO UNITARIO", "COSTO TOTAL"];
-        const columnasNumericas = ["Duración del Proyecto", "CANTIDAD"]; 
+        const columnasNumericas = ["Duración del Proyecto", "CANTIDAD"];
         const columnasFecha = ["Fecha Inicio Ejecución"];
-        const columnasMixtas = ["CDP", "RP", "Contrato Marco", "Contratista"]; 
+        const columnasMixtas = ["CDP", "RP", "Contrato Marco", "Contratista"];
+
+        // Columnas que en el sheets son fórmulas: nunca se envían desde la app
+        // (las calcula el sheets a partir de Proyecto/Actividad detallada).
+        const formulaColsPlan = ["Subsecretaría", "ACTIVIDAD MGA", "Codigo producto MGA", "Codigo CPC"];
+        const formulaColsAnexo = ["COSTO UNITARIO"];
+
+        // Columnas que solo el Equipo de Contratación puede editar
+        const adminOnlyPlan = ["Proyecto"];
+        const adminOnlyAnexo = ["Subsecretaría", "Proyecto", "CÓDIGO PRODUCTO MGA", "PRODUCTO MGA",
+            "ACTIVIDAD MGA", "ACTIVIDADES DETALLADAS", "Clasificador CPC", "Validador sección CPC",
+            "VALIDADOR ¿REQUIERE CPC?", "Clasificador por objeto de gasto (POSPRE)"];
+
+        // Quita del record los campos que el sheets calcula con fórmula,
+        // para que el backend nunca los sobrescriba con un valor literal.
+        function quitarColumnasFormula(record, tipo) {
+            const fc = tipo === 'plan' ? formulaColsPlan : formulaColsAnexo;
+            fc.forEach(c => { delete record[c]; });
+            return record;
+        }
         
         const dependenciasColumna = {
             "ACTIVIDAD MGA": "ActividadMGA", 
@@ -1440,27 +1459,32 @@
             const valStr = val === undefined || val === null ? '' : String(val);
             const valEsc = escapeHtml(valStr);
 
-            const planStaticCols = ["ACTIVIDAD MGA", "Codigo producto MGA", "Codigo CPC", "Subsecretaría"];
-            const anexoStaticCols = ["COSTO UNITARIO"];
-            const isStatic = (type === 'plan' && planStaticCols.includes(col)) ||
-                             (type === 'anexo' && anexoStaticCols.includes(col)) ||
-                             col === 'ID';
-            const disabledAttr = isStatic ? 'readonly' : '';
+            // Bloqueo 1: columnas-fórmula del sheets (siempre solo lectura)
+            const isFormulaCol = (type === 'plan' && formulaColsPlan.includes(col)) ||
+                                 (type === 'anexo' && formulaColsAnexo.includes(col));
+            // Bloqueo 2: columnas que solo Equipo de Contratación puede editar
+            const isAdmin = currentRole === 'Equipo de Contratación';
+            const isAdminOnly = !isAdmin && ((type === 'plan' && adminOnlyPlan.includes(col)) ||
+                                              (type === 'anexo' && adminOnlyAnexo.includes(col)));
+            const isStatic = isFormulaCol || isAdminOnly || col === 'ID';
+            // readonly funciona para <input>/<textarea>; <select> necesita disabled
+            const lockInput = isStatic ? 'readonly' : '';
+            const lockSelect = isStatic ? 'disabled' : '';
 
             if (columnasMoneda.includes(col)) {
                 const display = val !== '' && val !== null && val !== undefined ? formatMoneda(val) : '';
-                return `<input type="text" data-col="${colEsc}" data-currency="1" value="${escapeHtml(display)}" ${disabledAttr}>`;
+                return `<input type="text" data-col="${colEsc}" data-currency="1" value="${escapeHtml(display)}" ${lockInput}>`;
             }
             if (columnasFecha.includes(col)) {
                 let dateVal = val ? toYYYYMMDD(val) : '';
                 let valid = /^\d{4}-\d{2}-\d{2}$/.test(dateVal);
                 if (valid) {
-                    return `<input type="date" data-col="${colEsc}" value="${escapeHtml(dateVal)}" ${disabledAttr}>`;
+                    return `<input type="date" data-col="${colEsc}" value="${escapeHtml(dateVal)}" ${lockInput}>`;
                 }
-                return `<input type="text" data-col="${colEsc}" value="${valEsc}" placeholder="yyyy-mm-dd o texto" ${disabledAttr}>`;
+                return `<input type="text" data-col="${colEsc}" value="${valEsc}" placeholder="yyyy-mm-dd o texto" ${lockInput}>`;
             }
             if (columnasNumericas.includes(col)) {
-                return `<input type="number" data-col="${colEsc}" value="${valEsc}" step="any" ${disabledAttr}>`;
+                return `<input type="number" data-col="${colEsc}" value="${valEsc}" step="any" ${lockInput}>`;
             }
             // Dependencias dinámicas: "Actividad detallada" depende de Proyecto (anexoData)
             if (type === 'plan' && col === 'Actividad detallada') {
@@ -1481,7 +1505,7 @@
                     opts += `<option value="${escapeHtml(o)}" ${sel ? 'selected' : ''}>${escapeHtml(o)}</option>`;
                 });
                 if (valStr !== '' && !found) opts += `<option value="${valEsc}" selected>${valEsc}</option>`;
-                return `<select data-col="${colEsc}" ${disabledAttr}>${opts}</select>`;
+                return `<select data-col="${colEsc}" ${lockSelect}>${opts}</select>`;
             }
             // Listas desplegables o dependencias
             const hasList = listasDesplegables[col] && listasDesplegables[col].length > 0;
@@ -1498,20 +1522,20 @@
                     opts += `<option value="${escapeHtml(o)}" ${sel ? 'selected' : ''}>${escapeHtml(o)}</option>`;
                 });
                 if (valStr !== '' && !found) opts += `<option value="${valEsc}" selected>${valEsc}</option>`;
-                return `<select data-col="${colEsc}" ${disabledAttr}>${opts}</select>`;
+                return `<select data-col="${colEsc}" ${lockSelect}>${opts}</select>`;
             }
             // Mixtas: input con datalist
             if (columnasMixtas.includes(col)) {
                 const dlId = 'list-' + col.replace(/\s+/g, '');
-                return `<input type="text" list="${dlId}" data-col="${colEsc}" value="${valEsc}" ${disabledAttr}>`;
+                return `<input type="text" list="${dlId}" data-col="${colEsc}" value="${valEsc}" ${lockInput}>`;
             }
             // Texto largo (multilínea)
             const longTextCols = ['Objeto', 'Observación', 'Necesidad', 'Estudio Previo', 'Actividad detallada', 'ACTIVIDADES DETALLADAS'];
             if (longTextCols.includes(col)) {
-                return `<textarea data-col="${colEsc}" ${disabledAttr}>${valEsc}</textarea>`;
+                return `<textarea data-col="${colEsc}" ${lockInput}>${valEsc}</textarea>`;
             }
             // Texto plano
-            return `<input type="text" data-col="${colEsc}" value="${valEsc}" ${disabledAttr}>`;
+            return `<input type="text" data-col="${colEsc}" value="${valEsc}" ${lockInput}>`;
         }
 
         function abrirEditorFila(type, id) {
@@ -1535,6 +1559,23 @@
                 group.innerHTML = `<label>${escapeHtml(col)}</label>${fieldHTML}`;
                 container.appendChild(group);
             });
+
+            // Si cambia el Proyecto en el modal de Plan, re-renderiza el dropdown
+            // de "Actividad detallada" para que coincida con las del Anexo del nuevo proyecto.
+            if (type === 'plan') {
+                const selProy = container.querySelector('[data-col="Proyecto"]');
+                if (selProy) {
+                    selProy.addEventListener('change', () => {
+                        const actField = container.querySelector('[data-col="Actividad detallada"]');
+                        if (!actField) return;
+                        const grupo = actField.closest('.field-group');
+                        if (!grupo) return;
+                        const fakeRow = Object.assign({}, row, { Proyecto: selProy.value });
+                        const newHTML = buildEditField('Actividad detallada', '', fakeRow, 'plan');
+                        grupo.innerHTML = `<label>${escapeHtml('Actividad detallada')}</label>${newHTML}`;
+                    });
+                }
+            }
 
             document.getElementById('editRowModalTitle').innerText = 'Editar fila (' + (type === 'plan' ? 'Plan de Compras' : 'Anexo Presupuestal') + ')';
             const statusEl = document.getElementById('editRowStatus');
@@ -1600,12 +1641,16 @@
                 }
             }
 
-            // Recalcular costo unitario (Anexo)
+            // Recalcular costo unitario (Anexo) solo para mostrar en local;
+            // no se envía: si en el sheets es fórmula, será descartada por quitarColumnasFormula.
             if (editingDataType === 'anexo') {
                 const q = Number(record['CANTIDAD']) || 0;
                 const t = Number(record['COSTO TOTAL']) || 0;
                 record['COSTO UNITARIO'] = q > 0 ? t / q : 0;
             }
+
+            // Nunca enviamos columnas-fórmula al backend: las recalcula el sheets.
+            quitarColumnasFormula(record, editingDataType);
 
             try {
                 const payload = {
@@ -1734,7 +1779,9 @@
             }, 100);
 
             updateSaveStatus('saving');
-            enviarAccionConReintentos({ action: 'save', type: 'plan', record: n, requestId: generateUUID() })
+            const payloadDup = Object.assign({}, n);
+            quitarColumnasFormula(payloadDup, 'plan');
+            enviarAccionConReintentos({ action: 'save', type: 'plan', record: payloadDup, requestId: generateUUID() })
                 .then(result => {
                     if (result && result.status === 'success') {
                         if (result.id && result.id !== n.ID) n.ID = result.id;
@@ -1788,7 +1835,9 @@
             }, 100);
 
             updateSaveStatus('saving');
-            enviarAccionConReintentos({ action: 'save', type: 'plan', record: n, requestId: generateUUID() })
+            const payloadNec = Object.assign({}, n);
+            quitarColumnasFormula(payloadNec, 'plan');
+            enviarAccionConReintentos({ action: 'save', type: 'plan', record: payloadNec, requestId: generateUUID() })
                 .then(result => {
                     if (result && result.status === 'success') {
                         if (result.id && result.id !== n.ID) n.ID = result.id;
@@ -1841,7 +1890,9 @@
             }, 100);
 
             updateSaveStatus('saving');
-            enviarAccionConReintentos({ action: 'save', type: 'anexo', record: n, requestId: generateUUID() })
+            const payloadAnx = Object.assign({}, n);
+            quitarColumnasFormula(payloadAnx, 'anexo');
+            enviarAccionConReintentos({ action: 'save', type: 'anexo', record: payloadAnx, requestId: generateUUID() })
                 .then(result => {
                     if (result && result.status === 'success') {
                         if (result.id && result.id !== n.ID) n.ID = result.id;
