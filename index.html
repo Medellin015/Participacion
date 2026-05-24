@@ -383,7 +383,36 @@
         // Columnas que en el sheets son fórmulas: nunca se envían desde la app
         // (las calcula el sheets a partir de Proyecto/Actividad detallada).
         const formulaColsPlan = ["Subsecretaría", "ACTIVIDAD MGA", "Codigo producto MGA", "Codigo CPC"];
-        const formulaColsAnexo = ["COSTO UNITARIO"];
+        const formulaColsAnexo = [];
+
+        // Columnas calculadas que el modal nunca deja editar pero que sí enviamos
+        // al backend (el backend respeta cualquier fórmula que tenga el sheets).
+        const calculadasReadonly = { plan: [], anexo: ["COSTO UNITARIO"] };
+
+        // Columnas donde el usuario puede escribir una fórmula tipo =200+200
+        // (decimales con coma). El valor se calcula localmente y al backend se le
+        // envía el string con `=` para que lo guarde como fórmula real del sheets.
+        const colsFormulaUsuario = { plan: ["Valor Unitario"], anexo: ["COSTO TOTAL"] };
+
+        // Evalúa una fórmula simple del usuario: =200+200 / =100,5-50 / =1+2-3
+        // Devuelve { ok, value, error }. Solo admite + y - y números (con , o . como decimal).
+        function parsearFormulaUsuario(raw) {
+            let s = String(raw || '').trim();
+            if (!s || s.charAt(0) !== '=') return { ok: false, error: 'Falta "=" al inicio' };
+            s = s.slice(1).replace(/\s+/g, '').replace(/,/g, '.');
+            if (s === '') return { ok: false, error: 'Fórmula vacía' };
+            if (!/^[-+]?(\d+(\.\d+)?)([-+]\d+(\.\d+)?)*$/.test(s)) {
+                return { ok: false, error: 'Solo se permiten números, + y -' };
+            }
+            const tokens = s.match(/[-+]?\d+(\.\d+)?/g) || [];
+            let total = 0;
+            for (const t of tokens) {
+                const n = Number(t);
+                if (isNaN(n)) return { ok: false, error: 'Número inválido: ' + t };
+                total += n;
+            }
+            return { ok: true, value: total };
+        }
 
         // Permisos en el modal:
         // - Plan: solo Equipo de Contratación edita todo. Las subsecretarías
@@ -1461,9 +1490,10 @@
             const valStr = val === undefined || val === null ? '' : String(val);
             const valEsc = escapeHtml(valStr);
 
-            // Bloqueo 1: columnas-fórmula del sheets (siempre solo lectura)
+            // Bloqueo 1: columnas-fórmula del sheets o calculadas (siempre solo lectura)
             const isFormulaCol = (type === 'plan' && formulaColsPlan.includes(col)) ||
-                                 (type === 'anexo' && formulaColsAnexo.includes(col));
+                                 (type === 'anexo' && formulaColsAnexo.includes(col)) ||
+                                 (calculadasReadonly[type] || []).includes(col);
             // Bloqueo 2: permisos por rol
             //   Plan no-admin: solo puede tocar "Actividad detallada"
             //   Anexo no-admin: no puede tocar Proyecto ni Subsecretaría
@@ -1478,6 +1508,20 @@
             const lockSelect = isStatic ? 'disabled' : '';
 
             if (columnasMoneda.includes(col)) {
+                const userFormulaList = (colsFormulaUsuario[type] || []);
+                if (userFormulaList.includes(col)) {
+                    // Acepta moneda o fórmula tipo =200+200; si el sheets tiene fórmula
+                    // guardada (campo `${col}_formula`), la mostramos cruda para que la
+                    // pueda seguir editando.
+                    const formulaStored = row[col + '_formula'];
+                    let show;
+                    if (typeof formulaStored === 'string' && formulaStored.charAt(0) === '=') {
+                        show = formulaStored;
+                    } else {
+                        show = val !== '' && val !== null && val !== undefined ? formatMoneda(val) : '';
+                    }
+                    return `<input type="text" data-col="${colEsc}" data-userformula="1" value="${escapeHtml(show)}" placeholder="$ o =200+200" ${lockInput}>`;
+                }
                 const display = val !== '' && val !== null && val !== undefined ? formatMoneda(val) : '';
                 return `<input type="text" data-col="${colEsc}" data-currency="1" value="${escapeHtml(display)}" ${lockInput}>`;
             }
@@ -1616,19 +1660,52 @@
             statusEl.style.fontWeight = '700';
             statusEl.innerText = '⏳ Guardando, espera por favor...';
 
-            // Construir record
+            // Construir record. Las columnas con fórmula del usuario (Valor Unitario,
+            // COSTO TOTAL) pueden venir como =200+200; se validan, y guardamos por
+            // separado la fórmula cruda para que (a) el backend la escriba como
+            // setFormula y (b) la podamos mostrar de nuevo en el modal al re-editar.
             const record = { ID: editingRowId };
+            const formulasUsuario = {}; // col -> '=200+200' (solo si aplica)
+            let errorFormula = null;
+            const userFormulaList = (colsFormulaUsuario[editingDataType] || []);
             document.querySelectorAll('#editRowFields [data-col]').forEach(el => {
+                if (errorFormula) return;
                 const col = el.dataset.col;
                 let val = el.value;
+                if (el.dataset.userformula === '1') {
+                    const raw = String(val || '').trim();
+                    if (raw.length > 0 && raw.charAt(0) === '=') {
+                        const p = parsearFormulaUsuario(raw);
+                        if (!p.ok) { errorFormula = '"' + col + '": ' + p.error; return; }
+                        record[col] = raw;                 // string con '=' para backend
+                        formulasUsuario[col] = { formula: raw, value: p.value };
+                    } else {
+                        // moneda normal
+                        const s = String(val || '').replace(/\D/g, '');
+                        record[col] = s !== '' ? Number(s) : 0;
+                        formulasUsuario[col] = null;
+                    }
+                    return;
+                }
                 if (el.dataset.currency === '1') {
                     val = String(val).replace(/\D/g, '');
                     val = val !== '' ? Number(val) : 0;
                 } else if (columnasNumericas.includes(col)) {
-                    val = val === '' ? '' : Number(val);
+                    // Acepta decimales con coma O punto.
+                    const s = String(val || '').trim().replace(',', '.');
+                    val = s === '' ? '' : Number(s);
                 }
                 record[col] = val;
             });
+
+            if (errorFormula) {
+                saveBtn.style.background = '';
+                saveBtn.style.borderColor = '';
+                statusEl.style.color = 'var(--danger)';
+                statusEl.innerText = '❌ Fórmula inválida en ' + errorFormula;
+                saveBtn.disabled = false;
+                return;
+            }
 
             // Sincronizar campos automáticos (Plan)
             if (editingDataType === 'plan') {
@@ -1647,11 +1724,20 @@
                 }
             }
 
-            // Recalcular costo unitario (Anexo) solo para mostrar en local;
-            // no se envía: si en el sheets es fórmula, será descartada por quitarColumnasFormula.
+            // Recalcular costo unitario (Anexo) usando el VALOR CALCULADO de COSTO TOTAL
+            // (no el string '=...' si vino como fórmula). Acepta cantidad con coma o punto.
             if (editingDataType === 'anexo') {
-                const q = Number(record['CANTIDAD']) || 0;
-                const t = Number(record['COSTO TOTAL']) || 0;
+                let q = 0;
+                const qRaw = record['CANTIDAD'];
+                if (typeof qRaw === 'string') q = Number(qRaw.replace(',', '.')) || 0;
+                else q = Number(qRaw) || 0;
+
+                let t = 0;
+                if (formulasUsuario['COSTO TOTAL']) {
+                    t = formulasUsuario['COSTO TOTAL'].value;
+                } else {
+                    t = Number(record['COSTO TOTAL']) || 0;
+                }
                 record['COSTO UNITARIO'] = q > 0 ? t / q : 0;
             }
 
@@ -1696,12 +1782,23 @@
                 }
 
                 if (result && result.status === 'success') {
-                    // Aplicar cambios locales (optimista)
+                    // Aplicar cambios locales (optimista). Para las columnas con
+                    // fórmula del usuario, en local guardamos el VALOR CALCULADO y
+                    // dejamos la fórmula cruda en `${col}_formula`.
                     const data = editingDataType === 'plan' ? appData : anexoData;
                     const idx = data.findIndex(r => r.ID === editingRowId);
                     const finalId = result.id || record.ID;
                     if (idx !== -1) {
-                        Object.assign(data[idx], record, { ID: finalId });
+                        const recordLocal = Object.assign({}, record);
+                        Object.keys(formulasUsuario).forEach(col => {
+                            if (formulasUsuario[col]) {
+                                recordLocal[col] = formulasUsuario[col].value;
+                                recordLocal[col + '_formula'] = formulasUsuario[col].formula;
+                            } else {
+                                recordLocal[col + '_formula'] = null;
+                            }
+                        });
+                        Object.assign(data[idx], recordLocal, { ID: finalId });
                     }
                     saveBtn.style.background = '';
                     saveBtn.style.borderColor = '';
