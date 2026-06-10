@@ -1,0 +1,115 @@
+        :root {
+            --primary: #2563eb; --primary-hover: #1d4ed8; --surface: #ffffff; --background: #f1f5f9;
+            --text-main: #0f172a; --text-muted: #64748b; --border: #cbd5e1; --locked-bg: #f8fafc;
+            --editable-bg: #eff6ff; --success: #16a34a; --warning: #f59e0b; --danger: #dc2626; --info: #0ea5e9;
+        }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--background); color: var(--text-main); margin: 0; padding: 20px; }
+        .container { width: 100%; background: var(--surface); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column; height: 90vh; border: 1px solid var(--border); }
+        .header { padding: 15px 25px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--surface); z-index: 30; }
+        .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+        
+        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; font-size: 13.5px; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 6px rgba(2, 132, 199, 0.2); }
+        .btn-success { background-color: var(--success); color: white; }
+        .btn-success:hover { background-color: #059669; }
+        .btn-warning { background-color: var(--warning); color: white; }
+        .btn-warning:hover { background-color: #d97706; }
+        .btn-info { background-color: #f0f9ff; border: 1px solid var(--info); color: var(--info); box-shadow: none; }
+        .btn-info:hover { background-color: var(--info); color: white; }
+        .btn-outline { background-color: transparent; border: 1px solid var(--border); color: var(--text-main); box-shadow: none; }
+        .btn-outline:hover { background-color: #f1f5f9; border-color: #cbd5e1; }
+        
+        .btn-copy { background-color: #e0f2fe; color: #0284c7; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s; font-weight: bold; margin-right: 4px; }
+        .btn-copy:hover { background-color: #0284c7; color: white; }
+
+        .user-simulator { background: #f8fafc; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+        select { padding: 8px; border-radius: 6px; border: 1px solid var(--border); font-weight: 500; outline: none; color: var(--text-main); background-color: #fff; }
+        
+        .table-wrapper { overflow: auto; flex-grow: 1; scroll-behavior: smooth; background: #fff; }
+        table { border-collapse: collapse; text-align: left; white-space: nowrap; width: 100%; }
+        
+        /* ENCABEZADOS DE ALTO CONTRASTE */
+        th { background-color: #cbd5e1; padding: 12px 16px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; border-bottom: 2px solid #94a3b8; border-right: 1px solid #94a3b8; font-weight: 800; position: sticky; top: 0; z-index: 10; }
+        
+        td { padding: 10px 16px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+
+        .row-locked { background-color: var(--locked-bg); color: var(--text-muted); }
+        .row-locked td:nth-child(1) { background-color: #e2e8f0; font-weight: 600; color: var(--text-muted); }
+        
+        .row-editable { background-color: var(--editable-bg); transition: background-color 0.3s ease; }
+        .row-editable td:nth-child(1) { background-color: #bfdbfe; font-weight: 600; color: var(--primary); }
+
+        .sort-container { display: flex; justify-content: space-between; align-items: center; cursor: pointer; flex-grow: 1; }
+        .sort-icon { color: #64748b; font-size: 10px; margin-left: 5px; }
+        .sort-icon.active { color: var(--primary); font-weight: bold; }
+
+        /* Estilos para los embudos flotantes */
+        .filter-icon-btn { opacity: 0; background: none; border: none; cursor: pointer; font-size: 11px; color: #64748b; padding: 3px 6px; margin-left: 5px; transition: all 0.2s; border-radius: 4px; }
+        .filter-icon-btn:hover { background: #e2e8f0; color: var(--primary); }
+        th:hover .filter-icon-btn { opacity: 1; }
+        .filter-icon-btn.active { opacity: 1; color: var(--primary); font-weight: bold; background: #dbeafe; }
+
+        /* Clases para el Truco Espejo en celdas editables */
+        .cell-display { width: 100%; min-height: 20px; cursor: pointer; white-space: inherit; padding: 6px; border: 1px solid transparent; border-radius: 6px; box-sizing: border-box; transition: all 0.2s; word-wrap: break-word; }
+        .cell-display:hover { border: 1px dashed var(--primary); background: #dbeafe; }
+
+        .cell-input { width: 100%; max-width: 100%; border: 1px solid transparent; background: transparent; font-family: inherit; font-size: 13px; color: inherit; outline: none; padding: 6px; border-radius: 6px; box-sizing: border-box; text-overflow: ellipsis; overflow: hidden; transition: all 0.2s; }
+        .cell-input:hover { border: 1px dashed var(--primary); background: #dbeafe; }
+        .cell-input:focus { border: 1px solid var(--primary); background: #fff; }
+        select.cell-input { cursor: pointer; }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(2px); z-index: 100; justify-content: center; align-items: center; }
+        .modal { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
+        .modal-large { width: 650px; text-align: left; }
+        .modal-large h3 { color: var(--warning); margin-top: 0; }
+        .modal-large pre { background: #fffbeb; color: #b45309; padding: 15px; border-radius: 8px; font-size: 13px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; font-family: monospace; border: 1px solid #fde68a; line-height: 1.5; }
+        .modal input[type="password"] { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box; font-size: 14px; outline: none; transition: border 0.2s; }
+        .modal input[type="password"]:focus { border-color: var(--primary); }
+        .error-msg { color: var(--danger); font-size: 13px; margin-bottom: 10px; display: none; font-weight: 500; }
+        .view-hidden { display: none !important; }
+
+        .status-badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; background: #f1f5f9; color: #475569; transition: all 0.3s; }
+        .status-saving { background: #fef08a; color: #b45309; }
+        .status-loading { background: #e0f2fe; color: #0284c7; }
+        .status-saved { background: #d1fae5; color: #059669; }
+        .status-error { background: #fee2e2; color: #b91c1c; }
+        
+        .btn-delete { background-color: #fee2e2; color: #ef4444; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s; font-weight: bold; }
+        .btn-delete:hover { background-color: #ef4444; color: white; }
+        
+        #toast { display: none; position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 1000; font-size: 14px; font-weight: 500; }
+
+        /* Clases CSS para el Drag & Drop de columnas */
+        th.draggable { cursor: grab; }
+        th.draggable:active { cursor: grabbing; }
+        th.dragging { opacity: 0.6; background-color: #e2e8f0; border: 2px dashed var(--primary); }
+        th.drag-over { border-left: 4px solid var(--primary) !important; background-color: #e0f2fe; }
+        body.is-dragging th * { pointer-events: none; }
+
+        /* Modal de edición de fila */
+        .modal-edit { width: 95%; max-width: 1100px; height: 92vh; max-height: 92vh; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+        #editRowForm { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+        .modal-edit-header { flex: 0 0 auto; padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
+        .modal-edit-header h3 { margin: 0; font-size: 17px; color: var(--text-main); }
+        .modal-edit-header .close-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--text-muted); padding: 4px 8px; border-radius: 6px; }
+        .modal-edit-header .close-btn:hover { background: #e2e8f0; color: var(--text-main); }
+        .modal-edit-body { flex: 1 1 auto; min-height: 0; padding: 20px 24px; overflow-y: auto; overflow-x: hidden; }
+        .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .field-group label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+        .field-group input, .field-group select, .field-group textarea { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px; font-family: inherit; outline: none; background: white; transition: border-color 0.15s; width: 100%; box-sizing: border-box; }
+        .field-group input:focus, .field-group select:focus, .field-group textarea:focus { border-color: var(--primary); }
+        .field-group input:disabled, .field-group input[readonly], .field-group select:disabled { background: #f1f5f9; color: var(--text-muted); cursor: not-allowed; }
+        .field-group textarea { min-height: 60px; resize: vertical; }
+        .field-group.full-width { grid-column: 1 / -1; }
+        .modal-edit-footer { flex: 0 0 auto; padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; align-items: center; gap: 10px; background: #f8fafc; }
+        .btn-edit-row { background-color: #ecfeff; color: var(--info); border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; font-weight: bold; margin-right: 4px; }
+        .btn-edit-row:hover { background-color: var(--info); color: white; }
+
+        /* Columna de acciones flotante (sticky a la derecha) */
+        .sticky-action-th { position: sticky; right: 0; top: 0; z-index: 11; background: #cbd5e1; box-shadow: -3px 0 6px rgba(0,0,0,0.08); }
+        .sticky-action-td { position: sticky; right: 0; z-index: 5; box-shadow: -3px 0 6px rgba(0,0,0,0.08); }
+        .row-editable .sticky-action-td { background: var(--editable-bg); }
+        .row-locked .sticky-action-td { background: var(--locked-bg); }
