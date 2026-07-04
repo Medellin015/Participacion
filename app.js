@@ -1,5 +1,153 @@
+        // El Google Sheet / Apps Script pasa a ser un ESPEJO (best-effort). La
+        // fuente de verdad ahora es Firestore (ver bloque FIREBASE más abajo).
         const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzgyHwr-Zwrm8iinhx-NZk9Jk88GfAxOZk4gSRqgO34R7Yk2kHrY-K_hExIT5WMRZ0/exec";
-        
+
+        // ==================== FIREBASE / FIRESTORE (fuente de verdad) ====================
+        // apiKey es un identificador PÚBLICO del proyecto (va en el cliente por diseño;
+        // NO es un secreto). El acceso lo controlan las Reglas de Seguridad de Firestore.
+        const FIREBASE = {
+            projectId: "participacion-7e3e6",
+            apiKey: "AIzaSyBdOuPcS4yhSYuL7qfSWul0eTc-muHgQ7I"
+        };
+        const FS_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE.projectId}/databases/(default)/documents`;
+        // Mapeo tipo lógico de la app -> colección de Firestore
+        const FS_COLL = { plan: 'PlanCompras', anexo: 'AnexoPresupuestal' };
+
+        // ---- Conversión de valores Firestore <-> JS ----
+        function fsValToJs(v) {
+            if (!v) return '';
+            if (v.nullValue !== undefined) return '';
+            if (v.stringValue !== undefined) return v.stringValue;
+            if (v.integerValue !== undefined) return Number(v.integerValue);
+            if (v.doubleValue !== undefined) return Number(v.doubleValue);
+            if (v.booleanValue !== undefined) return v.booleanValue;
+            if (v.timestampValue !== undefined) return v.timestampValue;
+            return '';
+        }
+        function fsJsToVal(v) {
+            if (v === '' || v === null || v === undefined) return { nullValue: null };
+            if (typeof v === 'boolean') return { booleanValue: v };
+            if (typeof v === 'number' && Number.isFinite(v)) {
+                return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+            }
+            return { stringValue: String(v) };
+        }
+        function fsDocToObj(d) {
+            const o = {};
+            const f = d.fields || {};
+            for (const k in f) o[k] = fsValToJs(f[k]);
+            o.ID = d.name.split('/').pop(); // el id del documento manda como ID
+            return o;
+        }
+
+        // ---- Lectura de toda una colección (paginada) ----
+        async function fsGetAll(collection) {
+            let docs = [], pageToken = '';
+            do {
+                const url = `${FS_BASE}/${collection}?key=${FIREBASE.apiKey}&pageSize=300` +
+                            (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+                const r = await fetch(url);
+                if (!r.ok) throw new Error(`Firestore GET ${collection} HTTP ${r.status}`);
+                const j = await r.json();
+                (j.documents || []).forEach(d => docs.push(fsDocToObj(d)));
+                pageToken = j.nextPageToken || '';
+            } while (pageToken);
+            return docs;
+        }
+
+        // ---- Escritura / borrado de un documento ----
+        async function fsUpsert(collection, id, record) {
+            const fields = {};
+            for (const k in record) fields[k] = fsJsToVal(record[k]);
+            fields['ID'] = fsJsToVal(String(id)); // asegura el campo ID
+            const url = `${FS_BASE}/${collection}/${encodeURIComponent(id)}?key=${FIREBASE.apiKey}`;
+            const r = await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fields })
+            });
+            if (!r.ok) throw new Error(`Firestore save HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+            return await r.json();
+        }
+        async function fsDelete(collection, id) {
+            const url = `${FS_BASE}/${collection}/${encodeURIComponent(id)}?key=${FIREBASE.apiKey}`;
+            const r = await fetch(url, { method: 'DELETE' });
+            if (!r.ok && r.status !== 404) throw new Error(`Firestore delete HTTP ${r.status}`);
+            return true;
+        }
+
+        // ---- Carga inicial: arma la MISMA forma que devolvía el Apps Script ----
+        // (planData, anexoData, listas, mapaProySubse, mapasDependientes) para no
+        // tocar el resto de la app. Las listas y los mapas se derivan en el cliente.
+        async function fetchFirestoreData() {
+            const [plan, anexo, listasRows, proySubseRows] = await Promise.all([
+                fsGetAll(FS_COLL.plan),
+                fsGetAll(FS_COLL.anexo),
+                fsGetAll('Listas'),
+                fsGetAll('Proy-Subse')
+            ]);
+
+            // Listas: reshape columnar (cada columna -> arreglo de valores únicos).
+            // Firestore devuelve los docs ordenados por id ('row_1','row_10','row_2'...),
+            // así que reordenamos por el número de fila original para conservar el orden
+            // curado de la hoja en los desplegables del modal/datalists.
+            const _rowNum = (r) => { const m = /(\d+)/.exec(String(r.ID || '')); return m ? Number(m[1]) : 0; };
+            listasRows.sort((a, b) => _rowNum(a) - _rowNum(b));
+            const listas = {};
+            listasRows.forEach(row => {
+                Object.keys(row).forEach(col => {
+                    if (col === 'ID') return;
+                    const v = row[col];
+                    if (v === '' || v === null || v === undefined) return;
+                    (listas[col] = listas[col] || []).push(v);
+                });
+            });
+            Object.keys(listas).forEach(k => {
+                listas[k] = Array.from(new Set(listas[k].map(x => String(x))));
+            });
+
+            // mapaProySubse: Proyecto -> Subsecretaría equivalente
+            const mapaProySubse = {};
+            proySubseRows.forEach(r => {
+                const p = r['Proyecto'];
+                const s = r['Subsecretaría Equivalente en Plan de Compras'];
+                if (p !== '' && p !== null && p !== undefined && s) mapaProySubse[String(p)] = s;
+            });
+
+            // mapasDependientes: derivados del Anexo, agrupados por Proyecto
+            const md = { ActividadMGA: {}, Detalle: {}, ProductoMGA: {} };
+            const push = (obj, p, v) => {
+                if (p === null || p === '' || p === undefined || v === null || v === '' || v === undefined) return;
+                const k = String(p);
+                (obj[k] = obj[k] || []);
+                if (!obj[k].includes(v)) obj[k].push(v);
+            };
+            anexo.forEach(r => {
+                push(md.ActividadMGA, r.Proyecto, r['ACTIVIDAD MGA']);
+                push(md.Detalle, r.Proyecto, r['ACTIVIDADES DETALLADAS']);
+                push(md.ProductoMGA, r.Proyecto, r['CÓDIGO PRODUCTO MGA']);
+            });
+
+            return { status: 'success', planData: plan, anexoData: anexo, listas, mapaProySubse, mapasDependientes: md };
+        }
+
+        // ---- Espejo best-effort hacia el Google Sheet (nunca bloquea ni rompe) ----
+        function mirrorToSheet(payload) {
+            try {
+                let body;
+                if (payload.action === 'delete') {
+                    body = { action: 'delete', type: payload.type, id: payload.id, requestId: generateUUID() };
+                } else {
+                    const rec = Object.assign({}, payload.record);
+                    Object.keys(rec).forEach(k => { if (k.endsWith('_formula')) delete rec[k]; });
+                    quitarColumnasFormula(rec, payload.type);
+                    body = { action: 'save', type: payload.type, record: rec, requestId: generateUUID() };
+                }
+                fetch(WEB_APP_URL, { method: 'POST', body: JSON.stringify(body) }).catch(() => {});
+            } catch (e) { /* el espejo nunca debe afectar el flujo principal */ }
+        }
+        // ================================================================================
+
         let saveTimeoutId = null;
         let hasUnsavedChanges = false; 
         let isSaving = false; 
@@ -223,8 +371,7 @@
         async function cargarDatosDesdeGoogle() {
             updateSaveStatus('loading');
             try {
-                const response = await fetch(WEB_APP_URL + "?t=" + new Date().getTime());
-                const result = await response.json();
+                const result = await fetchFirestoreData();
                 if (result.status === 'success') {
                     planDeltas = { adds: [], updates: [], deletes: [] }; anexoDeltas = { adds: [], updates: [], deletes: [] };
                     appData = result.planData || []; anexoData = result.anexoData || []; mapasDependientes = result.mapasDependientes || {};
@@ -382,50 +529,53 @@
             document.getElementById('validationErrors').innerText = "Conectando con la base de datos..."; 
             document.getElementById('validationModal').style.display = 'flex';
 
-            try {
-                const response = await fetch(WEB_APP_URL + "?action=getDiferencias&proyecto=" + encodeURIComponent(curPro));
-                const result = await response.json();
+            // === Tabla dinámica calculada EN LA APP (antes venía del Apps Script) ===
+            // Concilia Plan (suma de "Valor Unitario") vs Anexo (suma de "COSTO TOTAL")
+            // agrupando por POSPRE, para el proyecto seleccionado.
+            const planByPospre = {}, anexoByPospre = {};
+            appData.forEach(r => {
+                if (String(r.Proyecto) !== String(curPro)) return;
+                const k = String(r["Posición Presupuestaría"] || "(Sin POSPRE)");
+                planByPospre[k] = (planByPospre[k] || 0) + (Number(r["Valor Unitario"]) || 0);
+            });
+            anexoData.forEach(r => {
+                if (String(r.Proyecto) !== String(curPro)) return;
+                const k = String(r["Clasificador por objeto de gasto (POSPRE)"] || "(Sin POSPRE)");
+                anexoByPospre[k] = (anexoByPospre[k] || 0) + (Number(r["COSTO TOTAL"]) || 0);
+            });
+            const keysP = Array.from(new Set([...Object.keys(planByPospre), ...Object.keys(anexoByPospre)])).sort();
+            const filas = [];
+            keysP.forEach(k => {
+                const p = planByPospre[k] || 0, a = anexoByPospre[k] || 0, d = p - a;
+                if (Math.abs(d) > 1) filas.push([k, formatMoneda(p), formatMoneda(a), formatMoneda(d)]);
+            });
 
-                if (result.status === 'success' || result.status === 'warning') {
-                    if (result.dataEstructurada && result.dataEstructurada.filas && result.dataEstructurada.filas.length > 0) {
-                        titleEl.innerText = "⚠️ Diferencias encontradas"; titleEl.style.color = "var(--danger)";
-                        document.getElementById('validationErrors').style.padding = "0"; 
-                        
-                        let tableHTML = '<table style="width: 100%; border-collapse: collapse; text-align: left; margin: 0; white-space: normal;">';
-                        if (result.dataEstructurada.encabezados.length > 0) {
-                            tableHTML += '<thead><tr>';
-                            result.dataEstructurada.encabezados.forEach(enc => {
-                                tableHTML += `<th style="background-color: #cbd5e1; padding: 12px 16px; border-bottom: 2px solid #94a3b8; border-right: 1px solid #94a3b8; color: #0f172a; font-weight: bold; position: sticky; top: 0; z-index: 30;">${enc}</th>`;
-                            });
-                            tableHTML += '</tr></thead>';
-                        }
-                        
-                        tableHTML += '<tbody>';
-                        result.dataEstructurada.filas.forEach(fila => {
-                            tableHTML += '<tr style="border-bottom: 1px solid var(--border);">';
-                            fila.forEach((celda, idx) => {
-                                let isLast = idx === fila.length - 1;
-                                let bgStyle = isLast ? 'background-color: #fee2e2; color: #dc2626; font-weight: bold;' : 'background-color: #ffffff; color: #334155;';
-                                tableHTML += `<td style="padding: 10px 16px; border-right: 1px solid var(--border); ${bgStyle}">${celda}</td>`;
-                            });
-                            tableHTML += '</tr>';
-                        });
-                        tableHTML += '</tbody></table>';
-                        document.getElementById('validationErrors').innerHTML = tableHTML;
-                    } else {
-                        titleEl.innerText = "✅ Todo cuadra perfectamente"; titleEl.style.color = "var(--success)";
-                        document.getElementById('validationErrors').style.padding = "15px";
-                        document.getElementById('validationErrors').innerHTML = "<span style='color: #059669; font-weight: 500;'>No se encontraron diferencias matemáticas para este proyecto.</span>";
-                    }
-                } else {
-                    titleEl.innerText = "❌ Error en consulta"; titleEl.style.color = "var(--danger)";
-                    document.getElementById('validationErrors').style.padding = "15px";
-                    document.getElementById('validationErrors').innerText = result.message || "Error al leer los datos.";
-                }
-            } catch (error) {
-                titleEl.innerText = "❌ Error de conexión"; titleEl.style.color = "var(--danger)";
-                document.getElementById('validationErrors').style.padding = "15px";
-                document.getElementById('validationErrors').innerText = "Fallo al conectar con Google Sheets: " + error.message;
+            const errEl = document.getElementById('validationErrors');
+            if (filas.length > 0) {
+                titleEl.innerText = "⚠️ Diferencias encontradas"; titleEl.style.color = "var(--danger)";
+                errEl.style.padding = "0";
+                const encabezados = ["POSPRE", "Valor Plan", "Valor Anexo", "Diferencia"];
+                let tableHTML = '<table style="width: 100%; border-collapse: collapse; text-align: left; margin: 0; white-space: normal;">';
+                tableHTML += '<thead><tr>';
+                encabezados.forEach(enc => {
+                    tableHTML += `<th style="background-color: #cbd5e1; padding: 12px 16px; border-bottom: 2px solid #94a3b8; border-right: 1px solid #94a3b8; color: #0f172a; font-weight: bold; position: sticky; top: 0; z-index: 30;">${escapeHtml(enc)}</th>`;
+                });
+                tableHTML += '</tr></thead><tbody>';
+                filas.forEach(fila => {
+                    tableHTML += '<tr style="border-bottom: 1px solid var(--border);">';
+                    fila.forEach((celda, idx) => {
+                        let isLast = idx === fila.length - 1;
+                        let bgStyle = isLast ? 'background-color: #fee2e2; color: #dc2626; font-weight: bold;' : 'background-color: #ffffff; color: #334155;';
+                        tableHTML += `<td style="padding: 10px 16px; border-right: 1px solid var(--border); ${bgStyle}">${escapeHtml(celda)}</td>`;
+                    });
+                    tableHTML += '</tr>';
+                });
+                tableHTML += '</tbody></table>';
+                errEl.innerHTML = tableHTML;
+            } else {
+                titleEl.innerText = "✅ Todo cuadra perfectamente"; titleEl.style.color = "var(--success)";
+                errEl.style.padding = "15px";
+                errEl.innerHTML = "<span style='color: #059669; font-weight: 500;'>No se encontraron diferencias por POSPRE para este proyecto.</span>";
             }
         }
 
@@ -1413,45 +1563,27 @@
                 record['COSTO UNITARIO'] = q > 0 ? t / q : 0;
             }
 
-            // Nunca enviamos columnas-fórmula al backend: las recalcula el sheets.
-            // PERO conservamos los valores derivados (ACTIVIDAD MGA, Codigo CPC, Codigo
-            // producto MGA, Subsecretaría) en el `record` local para que la UI los
-            // muestre inmediatamente. Al servidor le mandamos una copia sin esas columnas.
-            const recordRemoto = Object.assign({}, record);
-            quitarColumnasFormula(recordRemoto, editingDataType);
+            // Firebase es la fuente de verdad: guardamos el record COMPLETO (con las
+            // columnas derivadas ya calculadas en la app). Para las columnas con fórmula
+            // del usuario guardamos el VALOR calculado (no el string "=..."), y dejamos
+            // la fórmula cruda en `${col}_formula`. El Google Sheet se actualiza como espejo.
+            const recordFs = Object.assign({}, record);
+            Object.keys(formulasUsuario).forEach(col => {
+                if (formulasUsuario[col]) {
+                    recordFs[col] = formulasUsuario[col].value;
+                    recordFs[col + '_formula'] = formulasUsuario[col].formula;
+                } else {
+                    recordFs[col + '_formula'] = null;
+                }
+            });
 
             try {
-                const payload = {
+                let result = await enviarAccionConReintentos({
                     action: 'save',
                     type: editingDataType,
-                    record: recordRemoto,
+                    record: recordFs,
                     requestId: generateUUID()
-                };
-
-                // Reintenta automáticamente si el backend responde "candado/lock ocupado"
-                const isLockBusyError = (msg) => /candado|lock|wait.*timed?\s*out|ocupada/i.test(String(msg || ''));
-                let result = null;
-                let attempt = 0;
-                const maxAttempts = 4;
-                while (attempt < maxAttempts) {
-                    attempt++;
-                    if (attempt > 1) {
-                        statusEl.innerText = '⏳ Reintentando guardado (' + attempt + '/' + maxAttempts + ')...';
-                        await new Promise(r => setTimeout(r, 2000 * (attempt - 1)));
-                    }
-                    const ctrl = new AbortController();
-                    const timeoutId = setTimeout(() => ctrl.abort(), 45000);
-                    const response = await fetch(WEB_APP_URL, {
-                        method: 'POST',
-                        body: JSON.stringify(payload),
-                        signal: ctrl.signal
-                    });
-                    clearTimeout(timeoutId);
-                    result = await response.json();
-                    if (result.status === 'success') break;
-                    if (!isLockBusyError(result.message)) break;
-                    // si es error de candado, deja loopear para reintentar
-                }
+                });
 
                 if (result && result.status === 'success') {
                     // Aplicar cambios locales (optimista). Para las columnas con
@@ -1509,31 +1641,29 @@
         // ============== FIN EDITOR DE FILA ==============
 
         // ============== Helper: POST con reintentos automáticos en "candado ocupado" ==============
+        // Escribe en Firestore (fuente de verdad) con reintentos y actualiza el
+        // Google Sheet como espejo best-effort. Mantiene el mismo contrato de
+        // retorno { status, id, message } que esperaban quienes la llaman.
         async function enviarAccionConReintentos(payload, opts = {}) {
-            const maxAttempts = opts.maxAttempts || 4;
-            const timeoutMs = opts.timeoutMs || 45000;
-            const isLockBusyError = (msg) => /candado|lock|wait.*timed?\s*out|ocupada/i.test(String(msg || ''));
-            let result = null;
+            const maxAttempts = opts.maxAttempts || 3;
+            const coll = FS_COLL[payload.type];
+            if (!coll) return { status: 'error', message: 'Tipo desconocido: ' + payload.type };
+            let lastErr = null;
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                if (attempt > 1) await new Promise(r => setTimeout(r, 2000 * (attempt - 1)));
-                const ctrl = new AbortController();
-                const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+                if (attempt > 1) await new Promise(r => setTimeout(r, 1500 * (attempt - 1)));
                 try {
-                    const response = await fetch(WEB_APP_URL, {
-                        method: 'POST',
-                        body: JSON.stringify(payload),
-                        signal: ctrl.signal
-                    });
-                    clearTimeout(tid);
-                    result = await response.json();
-                    if (result.status === 'success') return result;
-                    if (!isLockBusyError(result.message)) return result;
+                    if (payload.action === 'delete') {
+                        await fsDelete(coll, payload.id);
+                    } else {
+                        await fsUpsert(coll, payload.record.ID, payload.record);
+                    }
+                    mirrorToSheet(payload); // espejo hacia el Sheet (no bloquea)
+                    return { status: 'success', id: payload.action === 'delete' ? payload.id : payload.record.ID };
                 } catch (err) {
-                    clearTimeout(tid);
-                    if (attempt === maxAttempts) throw err;
+                    lastErr = err;
                 }
             }
-            return result;
+            return { status: 'error', message: lastErr ? lastErr.message : 'error desconocido' };
         }
 
         function copiarFilaPlan(id) {
@@ -1558,9 +1688,7 @@
             }, 100);
 
             updateSaveStatus('saving');
-            const payloadDup = Object.assign({}, n);
-            quitarColumnasFormula(payloadDup, 'plan');
-            enviarAccionConReintentos({ action: 'save', type: 'plan', record: payloadDup, requestId: generateUUID() })
+            enviarAccionConReintentos({ action: 'save', type: 'plan', record: n, requestId: generateUUID() })
                 .then(result => {
                     if (result && result.status === 'success') {
                         if (result.id && result.id !== n.ID) n.ID = result.id;
@@ -1614,9 +1742,7 @@
             }, 100);
 
             updateSaveStatus('saving');
-            const payloadNec = Object.assign({}, n);
-            quitarColumnasFormula(payloadNec, 'plan');
-            enviarAccionConReintentos({ action: 'save', type: 'plan', record: payloadNec, requestId: generateUUID() })
+            enviarAccionConReintentos({ action: 'save', type: 'plan', record: n, requestId: generateUUID() })
                 .then(result => {
                     if (result && result.status === 'success') {
                         if (result.id && result.id !== n.ID) n.ID = result.id;
@@ -1669,9 +1795,7 @@
             }, 100);
 
             updateSaveStatus('saving');
-            const payloadAnx = Object.assign({}, n);
-            quitarColumnasFormula(payloadAnx, 'anexo');
-            enviarAccionConReintentos({ action: 'save', type: 'anexo', record: payloadAnx, requestId: generateUUID() })
+            enviarAccionConReintentos({ action: 'save', type: 'anexo', record: n, requestId: generateUUID() })
                 .then(result => {
                     if (result && result.status === 'success') {
                         if (result.id && result.id !== n.ID) n.ID = result.id;
