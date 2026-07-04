@@ -87,7 +87,12 @@
                 fsGetAll('Proy-Subse')
             ]);
 
-            // Listas: reshape columnar (cada columna -> arreglo de valores únicos)
+            // Listas: reshape columnar (cada columna -> arreglo de valores únicos).
+            // Firestore devuelve los docs ordenados por id ('row_1','row_10','row_2'...),
+            // así que reordenamos por el número de fila original para conservar el orden
+            // curado de la hoja en los desplegables del modal/datalists.
+            const _rowNum = (r) => { const m = /(\d+)/.exec(String(r.ID || '')); return m ? Number(m[1]) : 0; };
+            listasRows.sort((a, b) => _rowNum(a) - _rowNum(b));
             const listas = {};
             listasRows.forEach(row => {
                 Object.keys(row).forEach(col => {
