@@ -513,7 +513,14 @@
             }
         }
 
-        async function verDiferencias() {
+        // Atajo para el botón que agrupa por POSPRE + Actividad detallada
+        function verDiferenciasDetalle() { return verDiferencias('pospre-actividad'); }
+
+        // modo: 'pospre' (por defecto) agrupa solo por POSPRE.
+        //       'pospre-actividad' agrupa por POSPRE + Actividad detallada concatenados.
+        async function verDiferencias(modo) {
+            modo = modo || 'pospre';
+            const porActividad = (modo === 'pospre-actividad');
             let curPro = document.getElementById('filterProyectoAnexo').value;
             if(!curPro) {
                 document.getElementById('msgModalTitle').innerText = 'Alerta';
@@ -522,39 +529,69 @@
                 document.getElementById('msgModal').style.display = 'flex';
                 return;
             }
-            
+
             let titleEl = document.getElementById('validationTitle');
             titleEl.innerText = "⏳ Consultando..."; titleEl.style.color = "var(--warning)";
             document.getElementById('validationErrors').style.padding = "15px";
-            document.getElementById('validationErrors').innerText = "Conectando con la base de datos..."; 
+            document.getElementById('validationErrors').innerText = "Conectando con la base de datos...";
             document.getElementById('validationModal').style.display = 'flex';
 
-            // === Tabla dinámica calculada EN LA APP (antes venía del Apps Script) ===
-            // Concilia Plan (suma de "Valor Unitario") vs Anexo (suma de "COSTO TOTAL")
-            // agrupando por POSPRE, para el proyecto seleccionado.
-            const planByPospre = {}, anexoByPospre = {};
+            // === Tabla dinámica calculada EN LA APP ===
+            // Concilia Plan (suma de "Valor Unitario") vs Anexo (suma de "COSTO TOTAL").
+            // La llave de agrupación depende del modo:
+            //   'pospre'            -> POSPRE
+            //   'pospre-actividad'  -> POSPRE || Actividad detallada
+            // OJO: la columna de actividad se llama distinto en cada hoja:
+            //   Plan  = "Actividad detallada"   Anexo = "ACTIVIDADES DETALLADAS"
+            const SEP = ' ‖ ';
+            const norm = (v) => String(v ?? '').trim();
+            // Versión canónica SOLO para emparejar llaves (no para mostrar): evita
+            // falsos descuadres cuando el mismo POSPRE/actividad se escribió distinto
+            // entre Plan y Anexo (mayúsculas, tildes o dobles espacios).
+            const canon = (v) => norm(v)
+                .toLocaleUpperCase('es')
+                .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                .replace(/\s+/g, ' ');
+            const planBy = {}, anexoBy = {}, grupoDe = {};
             appData.forEach(r => {
                 if (String(r.Proyecto) !== String(curPro)) return;
-                const k = String(r["Posición Presupuestaría"] || "(Sin POSPRE)");
-                planByPospre[k] = (planByPospre[k] || 0) + (Number(r["Valor Unitario"]) || 0);
+                const posDisp = norm(r["Posición Presupuestaría"]) || "(Sin POSPRE)";
+                const actDisp = norm(r["Actividad detallada"]) || "(Sin actividad)";
+                const key = porActividad ? (canon(posDisp) + SEP + canon(actDisp)) : canon(posDisp);
+                planBy[key] = (planBy[key] || 0) + (Number(r["Valor Unitario"]) || 0);
+                if (!grupoDe[key]) grupoDe[key] = { pospre: posDisp, act: actDisp };
             });
             anexoData.forEach(r => {
                 if (String(r.Proyecto) !== String(curPro)) return;
-                const k = String(r["Clasificador por objeto de gasto (POSPRE)"] || "(Sin POSPRE)");
-                anexoByPospre[k] = (anexoByPospre[k] || 0) + (Number(r["COSTO TOTAL"]) || 0);
+                const posDisp = norm(r["Clasificador por objeto de gasto (POSPRE)"]) || "(Sin POSPRE)";
+                const actDisp = norm(r["ACTIVIDADES DETALLADAS"]) || "(Sin actividad)";
+                const key = porActividad ? (canon(posDisp) + SEP + canon(actDisp)) : canon(posDisp);
+                anexoBy[key] = (anexoBy[key] || 0) + (Number(r["COSTO TOTAL"]) || 0);
+                if (!grupoDe[key]) grupoDe[key] = { pospre: posDisp, act: actDisp };
             });
-            const keysP = Array.from(new Set([...Object.keys(planByPospre), ...Object.keys(anexoByPospre)])).sort();
+            const keys = Array.from(new Set([...Object.keys(planBy), ...Object.keys(anexoBy)])).sort();
             const filas = [];
-            keysP.forEach(k => {
-                const p = planByPospre[k] || 0, a = anexoByPospre[k] || 0, d = p - a;
-                if (Math.abs(d) > 1) filas.push([k, formatMoneda(p), formatMoneda(a), formatMoneda(d)]);
+            keys.forEach(key => {
+                const p = planBy[key] || 0, a = anexoBy[key] || 0, d = p - a;
+                if (Math.abs(d) > 1) {
+                    const info = grupoDe[key] || { pospre: key, act: "" };
+                    if (porActividad) {
+                        filas.push([info.pospre, info.act, formatMoneda(p), formatMoneda(a), formatMoneda(d)]);
+                    } else {
+                        filas.push([info.pospre, formatMoneda(p), formatMoneda(a), formatMoneda(d)]);
+                    }
+                }
             });
+
+            const encabezados = porActividad
+                ? ["POSPRE", "Actividad detallada", "Valor Plan", "Valor Anexo", "Diferencia"]
+                : ["POSPRE", "Valor Plan", "Valor Anexo", "Diferencia"];
+            const detalleTxt = porActividad ? "por POSPRE + Actividad detallada" : "por POSPRE";
 
             const errEl = document.getElementById('validationErrors');
             if (filas.length > 0) {
-                titleEl.innerText = "⚠️ Diferencias encontradas"; titleEl.style.color = "var(--danger)";
+                titleEl.innerText = "⚠️ Diferencias encontradas (" + detalleTxt + ")"; titleEl.style.color = "var(--danger)";
                 errEl.style.padding = "0";
-                const encabezados = ["POSPRE", "Valor Plan", "Valor Anexo", "Diferencia"];
                 let tableHTML = '<table style="width: 100%; border-collapse: collapse; text-align: left; margin: 0; white-space: normal;">';
                 tableHTML += '<thead><tr>';
                 encabezados.forEach(enc => {
@@ -575,7 +612,7 @@
             } else {
                 titleEl.innerText = "✅ Todo cuadra perfectamente"; titleEl.style.color = "var(--success)";
                 errEl.style.padding = "15px";
-                errEl.innerHTML = "<span style='color: #059669; font-weight: 500;'>No se encontraron diferencias por POSPRE para este proyecto.</span>";
+                errEl.innerHTML = "<span style='color: #059669; font-weight: 500;'>No se encontraron diferencias " + escapeHtml(detalleTxt) + " para este proyecto.</span>";
             }
         }
 
