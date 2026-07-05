@@ -545,10 +545,13 @@
             //   Plan  = "Actividad detallada"   Anexo = "ACTIVIDADES DETALLADAS"
             const SEP = ' ‖ ';
             const norm = (v) => String(v ?? '').trim();
-            // Versión canónica SOLO para emparejar llaves (no para mostrar): evita
-            // falsos descuadres cuando el mismo POSPRE/actividad se escribió distinto
-            // entre Plan y Anexo (mayúsculas, tildes o dobles espacios).
-            const canon = (v) => norm(v)
+            // Quita el prefijo de "formato texto" de Excel (´ ' ` ’) que traen los
+            // POSPRE del Anexo (p.ej. "´23201010030302") y que el Plan no tiene.
+            const cleanPospre = (v) => norm(v).replace(/^[´'`’]+/, '');
+            // Versión canónica SOLO para emparejar llaves (no para mostrar): ignora
+            // el prefijo de Excel, mayúsculas/minúsculas, tildes y espacios repetidos,
+            // para que el mismo POSPRE/actividad empareje aunque se digitara distinto.
+            const canon = (v) => cleanPospre(v)
                 .toLocaleUpperCase('es')
                 .normalize('NFD').replace(/[̀-ͯ]/g, '')
                 .replace(/\s+/g, ' ');
