@@ -644,8 +644,8 @@
         function updateFilterOptions() {
             const p1 = new Set(), posprePlanSet = new Set();
             appData.forEach(r => {
-                if(r.Proyecto) p1.add(r.Proyecto);
-                if(r["Posición Presupuestaría"]) posprePlanSet.add(r["Posición Presupuestaría"]);
+                if(r.Proyecto) p1.add(String(r.Proyecto).trim());
+                if(r["Posición Presupuestaría"]) posprePlanSet.add(String(r["Posición Presupuestaría"]).trim());
             });
             const selP = document.getElementById('filterProyecto'), selPosprePlan = document.getElementById('filterPosprePlan');
             // Preserva la selección actual antes de reescribir las opciones
@@ -662,7 +662,7 @@
                 if (prevPospre && opts.includes(prevPospre)) selPosprePlan.value = prevPospre;
             }
             
-            const p2 = new Set(); anexoData.forEach(r => { if(r.Proyecto) p2.add(r.Proyecto); });
+            const p2 = new Set(); anexoData.forEach(r => { if(r.Proyecto) p2.add(String(r.Proyecto).trim()); });
             const selPA = document.getElementById('filterProyectoAnexo');
             if(selPA) {
                 const prevPA = selPA.value;
@@ -676,8 +676,8 @@
                 let pSet = new Set();
                 anexoData.forEach(r => {
                     if(String(r.Proyecto) === String(fP)) {
-                        if(r["ACTIVIDAD MGA"]) aSet.add(r["ACTIVIDAD MGA"]);
-                        if(r["Clasificador por objeto de gasto (POSPRE)"]) pSet.add(r["Clasificador por objeto de gasto (POSPRE)"]);
+                        if(r["ACTIVIDAD MGA"]) aSet.add(String(r["ACTIVIDAD MGA"]).trim());
+                        if(r["Clasificador por objeto de gasto (POSPRE)"]) pSet.add(String(r["Clasificador por objeto de gasto (POSPRE)"]).trim());
                     }
                 });
                 let selA = document.getElementById('filterActividadMGA');
@@ -1901,7 +1901,7 @@
             let pSet = new Set();
             appData.forEach(r => {
                 if(!fP || String(r.Proyecto) === String(fP)) {
-                    if(r["Posición Presupuestaría"]) pSet.add(r["Posición Presupuestaría"]);
+                    if(r["Posición Presupuestaría"]) pSet.add(String(r["Posición Presupuestaría"]).trim());
                 }
             });
             let selPospre = document.getElementById('filterPosprePlan');
@@ -1920,8 +1920,8 @@
             let pSet = new Set();
             anexoData.forEach(r => {
                 if(String(r.Proyecto) === String(fP)) {
-                    if(r["ACTIVIDAD MGA"]) aSet.add(r["ACTIVIDAD MGA"]);
-                    if(r["Clasificador por objeto de gasto (POSPRE)"]) pSet.add(r["Clasificador por objeto de gasto (POSPRE)"]);
+                    if(r["ACTIVIDAD MGA"]) aSet.add(String(r["ACTIVIDAD MGA"]).trim());
+                    if(r["Clasificador por objeto de gasto (POSPRE)"]) pSet.add(String(r["Clasificador por objeto de gasto (POSPRE)"]).trim());
                 }
             });
             let selA = document.getElementById('filterActividadMGA');
